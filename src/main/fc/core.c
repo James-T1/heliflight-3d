@@ -47,7 +47,6 @@
 #include "drivers/sound_beeper.h"
 #include "drivers/system.h"
 #include "drivers/time.h"
-#include "drivers/transponder_ir.h"
 
 #include "config/config.h"
 #include "fc/controlrate_profile.h"
@@ -77,7 +76,6 @@
 #include "io/serial.h"
 #include "io/servos.h"
 #include "io/statusindicator.h"
-#include "io/transponder_ir.h"
 #include "io/vtx_control.h"
 #include "io/vtx_rtc6705.h"
 

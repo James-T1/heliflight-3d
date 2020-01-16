@@ -88,7 +88,6 @@ bool cliMode = false;
 #include "drivers/system.h"
 #include "drivers/time.h"
 #include "drivers/timer.h"
-#include "drivers/transponder_ir.h"
 #include "drivers/usb_msc.h"
 #include "drivers/vtx_common.h"
 #include "drivers/vtx_table.h"
@@ -116,7 +115,6 @@ bool cliMode = false;
 #include "io/gps.h"
 #include "io/ledstrip.h"
 #include "io/serial.h"
-#include "io/transponder_ir.h"
 #include "io/usb_msc.h"
 #include "io/vtx_control.h"
 #include "io/vtx.h"
@@ -242,6 +240,7 @@ static const char * const mixerNames[] = {
 #endif
 
 // sync this with features_e
+// left in TRANSPONDER from heliflight initial culling so targets don't have to be modified
 static const char * const featureNames[] = {
     "RX_PPM", "", "INFLIGHT_ACC_CAL", "RX_SERIAL", "MOTOR_STOP",
     "SERVO_TILT", "SOFTSERIAL", "GPS", "",
@@ -4915,9 +4914,6 @@ const cliResourceValue_t resourceTable[] = {
     DEFS( OWNER_RX_BIND,       PG_RX_CONFIG, rxConfig_t, spektrum_bind_pin_override_ioTag ),
     DEFS( OWNER_RX_BIND_PLUG,  PG_RX_CONFIG, rxConfig_t, spektrum_bind_plug_ioTag ),
 #endif
-#ifdef USE_TRANSPONDER
-    DEFS( OWNER_TRANSPONDER,   PG_TRANSPONDER_CONFIG, transponderConfig_t, ioTag ),
-#endif
 #ifdef USE_SPI
     DEFW( OWNER_SPI_SCK,       PG_SPI_PIN_CONFIG, spiPinConfig_t, ioTagSck, SPIDEV_COUNT ),
     DEFW( OWNER_SPI_MISO,      PG_SPI_PIN_CONFIG, spiPinConfig_t, ioTagMiso, SPIDEV_COUNT ),
@@ -5831,6 +5827,7 @@ static void cliResource(char *cmdline)
         cliPrintLine("Currently active IO resource assignments:\r\n(reboot to update)");
         cliRepeat('-', 20);
 #endif
+        // Loop over all I/O pins supported on target and print Port #, Pin # and what it is assigned to (owner)
         for (int i = 0; i < DEFIO_IO_USED_COUNT; i++) {
             const char* owner;
             owner = ownerNames[ioRecs[i].owner];
