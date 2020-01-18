@@ -62,7 +62,6 @@
 #include "io/ledstrip.h"
 #include "io/piniobox.h"
 #include "io/serial.h"
-#include "io/rcdevice_cam.h"
 #include "io/usb_cdc_hid.h"
 
 #include "msp/msp.h"
@@ -323,9 +322,6 @@ void tasksInit(void)
 #endif
 #endif
 
-#ifdef USE_RCDEVICE
-    setTaskEnabled(TASK_RCDEVICE, rcdeviceIsEnabled());
-#endif
 }
 
 #if defined(USE_TASK_STATISTICS)
@@ -413,10 +409,6 @@ cfTask_t cfTasks[TASK_COUNT] = {
 
 #ifdef USE_CMS
     [TASK_CMS] = DEFINE_TASK("CMS", NULL, NULL, cmsHandler, TASK_PERIOD_HZ(60), TASK_PRIORITY_LOW),
-#endif
-
-#ifdef USE_RCDEVICE
-    [TASK_RCDEVICE] = DEFINE_TASK("RCDEVICE", NULL, NULL, rcdeviceUpdate, TASK_PERIOD_HZ(20), TASK_PRIORITY_MEDIUM),
 #endif
 
 #ifdef USE_ADC_INTERNAL
