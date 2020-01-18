@@ -38,6 +38,7 @@
 #include "config/config.h"
 #include "fc/core.h"
 #include "fc/rc.h"
+#include "fc/rc_modes.h"
 #include "fc/runtime_config.h"
 
 #include "flight/pid.h"

@@ -39,6 +39,7 @@
 #include "config/config.h"
 #include "fc/core.h"
 #include "fc/runtime_config.h"
+#include "fc/rc_modes.h"
 
 #include "io/statusindicator.h"
 
