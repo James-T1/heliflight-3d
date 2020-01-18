@@ -66,6 +66,7 @@
 #include "flight/mixer.h"
 
 // For VISIBLE*
+#include "fc/rc_modes.h"
 #include "osd/osd.h"
 
 #include "rx/rx.h"
