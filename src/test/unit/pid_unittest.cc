@@ -66,9 +66,6 @@ extern "C" {
 
     PG_REGISTER(accelerometerConfig_t, accelerometerConfig, PG_ACCELEROMETER_CONFIG, 0);
 
-    bool unitLaunchControlActive = false;
-    launchControlMode_e unitLaunchControlMode = LAUNCH_CONTROL_MODE_NORMAL;
-
     float getThrottlePIDAttenuation(void) { return simulatedThrottlePIDAttenuation; }
     float getMotorMixRange(void) { return simulatedMotorMixRange; }
     float getSetpointRate(int axis) { return simulatedSetpointRate[axis]; }
@@ -78,7 +75,6 @@ extern "C" {
     bool gyroOverflowDetected(void) { return false; }
     float getRcDeflection(int axis) { return simulatedRcDeflection[axis]; }
     void beeperConfirmationBeeps(uint8_t) { }
-    bool isLaunchControlActive(void) {return unitLaunchControlActive; }
     void disarm(void) { }
     float applyFFLimit(int axis, float value, float Kp, float currentPidSetpoint) {
         UNUSED(axis);
@@ -141,8 +137,6 @@ void setDefaultTestSettings(void) {
     pidProfile->iterm_relax_cutoff = 11,
     pidProfile->iterm_relax_type = ITERM_RELAX_SETPOINT,
     pidProfile->abs_control_gain = 0,
-    pidProfile->launchControlMode = LAUNCH_CONTROL_MODE_NORMAL,
-    pidProfile->launchControlGain = 40,
 
     gyro.targetLooptime = 4000;
 }
@@ -175,8 +169,6 @@ void resetTest(void) {
     attitude.values.yaw = 0;
 
     flightModeFlags = 0;
-    unitLaunchControlActive = false;
-    pidProfile->launchControlMode = unitLaunchControlMode;
     pidInit(pidProfile);
 
     // Run pidloop for a while after reset
@@ -671,7 +663,6 @@ TEST(pidControllerTest, testLaunchControl) {
     // working then any I calculations would be incorrect.
 
     resetTest();
-    unitLaunchControlActive = true;
     ENABLE_ARMING_FLAG(ARMED);
     pidStabilisationState(PID_STABILISATION_ON);
 
@@ -709,9 +700,7 @@ TEST(pidControllerTest, testLaunchControl) {
     EXPECT_FLOAT_EQ(0, pidData[FD_YAW].D);
 
     // test NORMAL mode - expect P/I on roll and pitch, P on yaw but I == 0
-    unitLaunchControlMode = LAUNCH_CONTROL_MODE_NORMAL;
     resetTest();
-    unitLaunchControlActive = true;
     ENABLE_ARMING_FLAG(ARMED);
     pidStabilisationState(PID_STABILISATION_ON);
 
@@ -730,9 +719,7 @@ TEST(pidControllerTest, testLaunchControl) {
     EXPECT_FLOAT_EQ(0, pidData[FD_YAW].I);
 
     // test PITCHONLY mode - expect P/I only on pitch; I cannot go negative
-    unitLaunchControlMode = LAUNCH_CONTROL_MODE_PITCHONLY;
     resetTest();
-    unitLaunchControlActive = true;
     ENABLE_ARMING_FLAG(ARMED);
     pidStabilisationState(PID_STABILISATION_ON);
 
@@ -759,9 +746,7 @@ TEST(pidControllerTest, testLaunchControl) {
     EXPECT_FLOAT_EQ(0, pidData[FD_YAW].I);
 
     // test FULL mode - expect P/I on all axes
-    unitLaunchControlMode = LAUNCH_CONTROL_MODE_FULL;
     resetTest();
-    unitLaunchControlActive = true;
     ENABLE_ARMING_FLAG(ARMED);
     pidStabilisationState(PID_STABILISATION_ON);
 
