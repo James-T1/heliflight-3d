@@ -95,7 +95,6 @@
 
 #include "io/asyncfatfs/asyncfatfs.h"
 #include "io/beeper.h"
-#include "io/dashboard.h"
 #include "io/displayport_frsky_osd.h"
 #include "io/displayport_max7456.h"
 #include "io/displayport_msp.h"
@@ -833,17 +832,6 @@ void init(void)
 
     batteryInit(); // always needs doing, regardless of features.
 
-#ifdef USE_DASHBOARD
-    if (featureIsEnabled(FEATURE_DASHBOARD)) {
-#ifdef USE_OLED_GPS_DEBUG_PAGE_ONLY
-        dashboardShowFixedPage(PAGE_GPS);
-#else
-        dashboardResetPageCycling();
-        dashboardEnablePageCycling();
-#endif
-    }
-#endif
-
 #ifdef USE_PERSISTENT_STATS
     statsInit();
 #endif
@@ -925,13 +913,6 @@ void init(void)
     // If BFOSD is not active, then register MSP_DISPLAYPORT as a CMS device.
     if (!osdDisplayPort)
         cmsDisplayPortRegister(displayPortMspInit());
-#endif
-
-#ifdef USE_DASHBOARD
-    // Dashbord will register with CMS by itself.
-    if (featureIsEnabled(FEATURE_DASHBOARD)) {
-        dashboardInit();
-    }
 #endif
 
 #if defined(USE_CMS) && defined(USE_SPEKTRUM_CMS_TELEMETRY) && defined(USE_TELEMETRY_SRXL)

@@ -442,6 +442,7 @@ static void validateAndFixConfig(void)
 #endif
 
 #ifndef USE_DASHBOARD
+    // HF3D:  Left in from heliflight initial culling so targets don't have to be modified
     featureDisableImmediate(FEATURE_DASHBOARD);
 #endif
 
@@ -451,6 +452,11 @@ static void validateAndFixConfig(void)
 
 #ifndef USE_SERVOS
     featureDisableImmediate(FEATURE_SERVO_TILT | FEATURE_CHANNEL_FORWARDING);
+#endif
+
+#ifndef USE_TRANSPONDER
+    // HF3D:  Left in from heliflight initial culling so targets don't have to be modified
+    featureDisableImmediate(FEATURE_TRANSPONDER);
 #endif
 
 #ifndef USE_RX_SPI

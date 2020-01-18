@@ -313,7 +313,6 @@
 #if (FLASH_SIZE > 256)
 #define USE_AIRMODE_LPF
 #define USE_CANVAS
-#define USE_DASHBOARD
 #define USE_FRSKYOSD
 #define USE_GPS
 #define USE_GPS_NMEA

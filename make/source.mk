@@ -138,11 +138,9 @@ COMMON_SRC = \
             drivers/rangefinder/rangefinder_hcsr04.c \
             drivers/rangefinder/rangefinder_lidartf.c \
             drivers/serial_escserial.c \
-            io/dashboard.c \
             io/displayport_frsky_osd.c \
             io/displayport_max7456.c \
             io/displayport_msp.c \
-            io/displayport_oled.c \
             io/displayport_srxl.c \
             io/displayport_crsf.c \
             io/displayport_hott.c \
@@ -288,7 +286,6 @@ SIZE_OPTIMISED_SRC := $(SIZE_OPTIMISED_SRC) \
             config/feature.c \
             config/config_streamer.c \
             i2c_bst.c \
-            io/dashboard.c \
             io/serial.c \
             io/serial_4way.c \
             io/serial_4way_avrootloader.c \

@@ -621,8 +621,6 @@ bool featureIsEnabled(uint32_t) { return false;}
 bool sensors(uint32_t) { return false;}
 void tryArm(void) {}
 void disarm(void) {}
-void dashboardDisablePageCycling() {}
-void dashboardEnablePageCycling() {}
 
 bool failsafeIsActive() { return false; }
 bool rxIsReceivingSignal() { return true; }

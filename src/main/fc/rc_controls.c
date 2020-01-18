@@ -45,7 +45,6 @@
 #include "flight/failsafe.h"
 
 #include "io/beeper.h"
-#include "io/dashboard.h"
 #include "io/gps.h"
 #include "io/motors.h"
 
@@ -344,15 +343,25 @@ void processRcStickPositions()
         }
     }
 
-#ifdef USE_DASHBOARD
-    if (rcSticks == THR_LO + YAW_CE + PIT_HI + ROL_LO) {
-        dashboardDisablePageCycling();
-    }
-
-    if (rcSticks == THR_LO + YAW_CE + PIT_HI + ROL_HI) {
-        dashboardEnablePageCycling();
-    }
-#endif
+// HF3D:  Removed dashboard, VTX and cam control
+//        Left the stick commands for re-use if desired
+//#ifdef USE_DASHBOARD
+//    if (rcSticks == THR_LO + YAW_CE + PIT_HI + ROL_LO) {
+//    if (rcSticks == THR_LO + YAW_CE + PIT_HI + ROL_HI) {
+//#ifdef USE_VTX_CONTROL
+//    if (rcSticks ==  THR_HI + YAW_LO + PIT_CE + ROL_HI) {
+//    if (rcSticks ==  THR_HI + YAW_LO + PIT_CE + ROL_LO) {
+//    if (rcSticks ==  THR_HI + YAW_HI + PIT_CE + ROL_HI) {
+//    if (rcSticks ==  THR_HI + YAW_HI + PIT_CE + ROL_LO) {
+//#ifdef USE_CAMERA_CONTROL
+//    if (rcSticks == THR_CE + YAW_HI + PIT_CE + ROL_CE) {
+//    } else if (rcSticks == THR_CE + YAW_CE + PIT_CE + ROL_LO) {
+//        cameraControlKeyPress(CAMERA_CONTROL_KEY_LEFT, 0);
+//        repeatAfter(3 * STICK_DELAY_MS);
+//    } else if (rcSticks == THR_CE + YAW_CE + PIT_HI + ROL_CE) {
+//    } else if (rcSticks == THR_CE + YAW_CE + PIT_CE + ROL_HI) {
+//    } else if (rcSticks == THR_CE + YAW_CE + PIT_LO + ROL_CE) {
+//    } else if (rcSticks == THR_LO + YAW_CE + PIT_HI + ROL_CE) {
 
 }
 
