@@ -55,7 +55,6 @@ COMMON_SRC = \
             io/beeper.c \
             io/piniobox.c \
             io/serial.c \
-            io/smartaudio_protocol.c \
             io/statusindicator.c \
             io/usb_cdc_hid.c \
             io/usb_msc.c \
