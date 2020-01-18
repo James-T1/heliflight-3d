@@ -81,7 +81,7 @@ typedef enum {
     TIM_USE_LED            = 0x10,
     TIM_USE_TRANSPONDER    = 0x20,
     TIM_USE_BEEPER         = 0x40,
-    TIM_USE_CAMERA_CONTROL = 0x80,
+    TIM_USE_CAMERA_CONTROL = 0x80,     // HF3D:  Left in for target compatibility during initial culling
 } timerUsageFlag_e;
 
 // use different types from capture and overflow - multiple overflow handlers are implemented as linked list

@@ -33,7 +33,6 @@
 #include "pg/pg.h"
 
 #ifdef SYNERGYF4
-#include "io/vtx.h"
 #include "io/ledstrip.h"
 #include "config/config.h"
 #include "pg/piniobox.h"

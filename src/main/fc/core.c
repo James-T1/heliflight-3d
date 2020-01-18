@@ -76,8 +76,6 @@
 #include "io/serial.h"
 #include "io/servos.h"
 #include "io/statusindicator.h"
-#include "io/vtx_control.h"
-#include "io/vtx_rtc6705.h"
 
 #include "msp/msp_serial.h"
 
@@ -634,16 +632,6 @@ static void updateMagHold(void)
 }
 #endif
 
-#ifdef USE_VTX_CONTROL
-static bool canUpdateVTX(void)
-{
-#ifdef USE_VTX_RTC6705
-    return vtxRTC6705CanUpdate();
-#endif
-    return true;
-}
-#endif
-
 #if defined(USE_RUNAWAY_TAKEOFF) || defined(USE_GPS_RESCUE)
 // determine if the R/P/Y stick deflection exceeds the specified limit - integer math is good enough here.
 bool areSticksActive(uint8_t stickPercentLimit)
@@ -1033,14 +1021,6 @@ bool processRx(timeUs_t currentTimeUs)
 
             sharedPortTelemetryEnabled = false;
         }
-    }
-#endif
-
-#ifdef USE_VTX_CONTROL
-    vtxUpdateActivatedChannel();
-
-    if (canUpdateVTX()) {
-        handleVTXControlButton();
     }
 #endif
 

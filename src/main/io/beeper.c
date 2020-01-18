@@ -41,7 +41,6 @@
 #include "fc/runtime_config.h"
 
 #include "io/statusindicator.h"
-#include "io/vtx_control.h"
 
 #ifdef USE_GPS
 #include "io/gps.h"
