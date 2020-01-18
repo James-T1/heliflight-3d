@@ -133,7 +133,6 @@ COMMON_SRC = \
             cms/cms_menu_osd.c \
             cms/cms_menu_power.c \
             cms/cms_menu_saveexit.c \
-            drivers/display_ug2864hsweg01.c \
             drivers/light_ws2811strip.c \
             drivers/rangefinder/rangefinder_hcsr04.c \
             drivers/rangefinder/rangefinder_lidartf.c \
@@ -269,7 +268,6 @@ SIZE_OPTIMISED_SRC := $(SIZE_OPTIMISED_SRC) \
             drivers/compass/compass_hmc5883l.c \
             drivers/compass/compass_qmc5883l.c \
             drivers/compass/compass_lis3mdl.c \
-            drivers/display_ug2864hsweg01.c \
             drivers/inverter.c \
             drivers/light_ws2811strip.c \
             drivers/light_ws2811strip_hal.c \

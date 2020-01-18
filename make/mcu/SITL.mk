@@ -33,7 +33,6 @@ MCU_EXCLUDES = \
             drivers/serial_uart_init.c \
             drivers/serial_uart_pinconfig.c \
             drivers/rx/rx_xn297.c \
-            drivers/display_ug2864hsweg01.c \
             telemetry/crsf.c \
             telemetry/srxl.c
 
