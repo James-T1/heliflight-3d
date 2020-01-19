@@ -89,7 +89,6 @@
 #include "drivers/dshot.h"
 #include "drivers/osd_symbols.h"
 #include "drivers/time.h"
-#include "drivers/vtx_common.h"
 
 #include "fc/controlrate_profile.h"
 #include "fc/core.h"
@@ -108,7 +107,6 @@
 
 #include "io/beeper.h"
 #include "io/gps.h"
-#include "io/vtx.h"
 
 #include "osd/osd.h"
 #include "osd/osd_elements.h"
@@ -1184,40 +1182,6 @@ static void osdElementTimer(osdElementParms_t *element)
     osdFormatTimer(element->buff, true, true, element->item - OSD_ITEM_TIMER_1);
 }
 
-#ifdef USE_VTX_COMMON
-static void osdElementVtxChannel(osdElementParms_t *element)
-{
-    const vtxDevice_t *vtxDevice = vtxCommonDevice();
-    const char vtxBandLetter = vtxCommonLookupBandLetter(vtxDevice, vtxSettingsConfig()->band);
-    const char *vtxChannelName = vtxCommonLookupChannelName(vtxDevice, vtxSettingsConfig()->channel);
-    unsigned vtxStatus = 0;
-    uint8_t vtxPower = vtxSettingsConfig()->power;
-    if (vtxDevice) {
-        vtxCommonGetStatus(vtxDevice, &vtxStatus);
-
-        if (vtxSettingsConfig()->lowPowerDisarm) {
-            vtxCommonGetPowerIndex(vtxDevice, &vtxPower);
-        }
-    }
-    const char *vtxPowerLabel = vtxCommonLookupPowerName(vtxDevice, vtxPower);
-
-    char vtxStatusIndicator = '\0';
-    if (IS_RC_MODE_ACTIVE(BOXVTXCONTROLDISABLE)) {
-        vtxStatusIndicator = 'D';
-    } else if (vtxStatus & VTX_STATUS_PIT_MODE) {
-        vtxStatusIndicator = 'P';
-    }
-
-    if (vtxStatus & VTX_STATUS_LOCKED) {
-        tfp_sprintf(element->buff, "-:-:-:L");
-    } else if (vtxStatusIndicator) {
-        tfp_sprintf(element->buff, "%c:%s:%s:%c", vtxBandLetter, vtxChannelName, vtxPowerLabel, vtxStatusIndicator);
-    } else {
-        tfp_sprintf(element->buff, "%c:%s:%s", vtxBandLetter, vtxChannelName, vtxPowerLabel);
-    }
-}
-#endif // USE_VTX_COMMON
-
 static void osdElementWarnings(osdElementParms_t *element)
 {
 #define OSD_WARNINGS_MAX_SIZE 12
@@ -1295,29 +1259,6 @@ static void osdElementWarnings(osdElementParms_t *element)
         element->attr = DISPLAYPORT_ATTR_INFO;
         return;
     }
-
-#ifdef USE_LAUNCH_CONTROL
-    // Warn when in launch control mode
-    if (osdWarnGetState(OSD_WARNING_LAUNCH_CONTROL) && isLaunchControlActive()) {
-#ifdef USE_ACC
-        if (sensors(SENSOR_ACC)) {
-            const int pitchAngle = constrain((attitude.raw[FD_PITCH] - accelerometerConfig()->accelerometerTrims.raw[FD_PITCH]) / 10, -90, 90);
-            tfp_sprintf(element->buff, "LAUNCH %d", pitchAngle);
-        } else
-#endif // USE_ACC
-        {
-            tfp_sprintf(element->buff, "LAUNCH");
-        }
-
-        // Blink the message if the throttle is within 10% of the launch setting
-        if ( calculateThrottlePercent() >= MAX(currentPidProfile->launchControlThrottlePercent - 10, 0)) {
-            SET_BLINK(OSD_WARNINGS);
-        }
-
-        element->attr = DISPLAYPORT_ATTR_INFO;
-        return;
-    }
-#endif // USE_LAUNCH_CONTROL
 
     // RSSI
     if (osdWarnGetState(OSD_WARNING_RSSI) && (getRssiPercent() < osdConfig()->rssi_alarm)) {
@@ -1579,9 +1520,6 @@ const osdElementDrawFn osdElementDrawFunction[OSD_ITEM_COUNT] = {
     [OSD_FLYMODE]                 = osdElementFlymode,
     [OSD_CRAFT_NAME]              = NULL,  // only has background
     [OSD_THROTTLE_POS]            = osdElementThrottlePosition,
-#ifdef USE_VTX_COMMON
-    [OSD_VTX_CHANNEL]             = osdElementVtxChannel,
-#endif
     [OSD_CURRENT_DRAW]            = osdElementCurrentDraw,
     [OSD_MAH_DRAWN]               = osdElementMahDrawn,
 #ifdef USE_GPS

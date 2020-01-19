@@ -36,7 +36,7 @@
 #define PG_SERIAL_CONFIG 13 // struct OK
 #define PG_PID_PROFILE 14 // struct OK, CF differences
 #define PG_ARMING_CONFIG 16 // structs OK, CF naming differences
-#define PG_TRANSPONDER_CONFIG 17 // struct OK
+#define PG_TRANSPONDER_CONFIG 17 // struct OK   -- removed with Heliflight initial culling
 #define PG_SYSTEM_CONFIG 18 // just has i2c_highspeed
 #define PG_FEATURE_CONFIG 19 // just has enabledFeatures
 #define PG_MIXER_CONFIG 20 // Cleanflight has single struct mixerConfig_t, betaflight has mixerConfig_t and servoMixerConfig_t
@@ -80,7 +80,7 @@
 //#define PG_VTX_CONFIG 54 // CF 1.x
 #define PG_GPS_RESCUE 55 // struct OK
 #define PG_POSITION 56
-#define PG_VTX_IO_CONFIG 57
+//#define PG_VTX_IO_CONFIG 57
 
 // Driver configuration
 #define PG_DRIVER_PWM_RX_CONFIG 100 // does not exist in betaflight
@@ -91,7 +91,7 @@
 #define PG_CURRENT_SENSOR_ADC_CONFIG 256
 #define PG_CURRENT_SENSOR_VIRTUAL_CONFIG 257
 #define PG_VOLTAGE_SENSOR_ADC_CONFIG 258
-#define PG_VTX_SETTINGS_CONFIG 259
+//#define PG_VTX_SETTINGS_CONFIG 259
 
 
 // betaflight specific parameter group ids start at 500
@@ -111,11 +111,11 @@
 #define PG_DISPLAY_PORT_MSP_CONFIG 512
 #define PG_DISPLAY_PORT_MAX7456_CONFIG 513
 #define PG_VCD_CONFIG 514
-#define PG_VTX_CONFIG 515
+//#define PG_VTX_CONFIG 515
 #define PG_SONAR_CONFIG 516
 #define PG_ESC_SENSOR_CONFIG 517
 #define PG_I2C_CONFIG 518
-#define PG_DASHBOARD_CONFIG 519
+#define PG_DASHBOARD_CONFIG 519        // HF3D:  Dashboard support removed in initial cull
 #define PG_SPI_PIN_CONFIG 520
 #define PG_ESCSERIAL_CONFIG 521
 #define PG_CAMERA_CONTROL_CONFIG 522
@@ -135,14 +135,14 @@
 #define PG_SPI_PREINIT_OPU_CONFIG 536
 #define PG_RX_SPI_CONFIG 537
 #define PG_BOARD_CONFIG 538
-#define PG_RCDEVICE_CONFIG 539
+#define PG_RCDEVICE_CONFIG 539        // HF3D:  Runcam Split support removed in initial cull
 #define PG_GYRO_DEVICE_CONFIG 540
 #define PG_MCO_CONFIG 541
 #define PG_RX_SPEKTRUM_SPI_CONFIG 542
 #define PG_SERIAL_UART_CONFIG 543
 #define PG_RPM_FILTER_CONFIG 544
 #define PG_LED_STRIP_STATUS_MODE_CONFIG 545 // Used to hold the configuration for the LED_STRIP status mode (not built on targets with limited flash)
-#define PG_VTX_TABLE_CONFIG 546
+//#define PG_VTX_TABLE_CONFIG 546
 #define PG_STATS_CONFIG 547
 #define PG_QUADSPI_CONFIG 548
 #define PG_TIMER_UP_CONFIG 549 // used to store dmaopt for TIMx_UP channel

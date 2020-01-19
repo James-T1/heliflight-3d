@@ -90,17 +90,11 @@ typedef enum {
 #if defined(USE_BARO) || defined(USE_GPS)
     TASK_ALTITUDE,
 #endif
-#ifdef USE_DASHBOARD
-    TASK_DASHBOARD,
-#endif
 #ifdef USE_TELEMETRY
     TASK_TELEMETRY,
 #endif
 #ifdef USE_LED_STRIP
     TASK_LEDSTRIP,
-#endif
-#ifdef USE_TRANSPONDER
-    TASK_TRANSPONDER,
 #endif
 #ifdef STACK_CHECK
     TASK_STACK_CHECK,
@@ -116,16 +110,6 @@ typedef enum {
 #endif
 #ifdef USE_CMS
     TASK_CMS,
-#endif
-#ifdef USE_VTX_CONTROL
-    TASK_VTXCTRL,
-#endif
-#ifdef USE_CAMERA_CONTROL
-    TASK_CAMCTRL,
-#endif
-
-#ifdef USE_RCDEVICE
-    TASK_RCDEVICE,
 #endif
 
 #ifdef USE_ADC_INTERNAL

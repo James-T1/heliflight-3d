@@ -347,10 +347,6 @@ timer_definition_unittest_INCLUDE_DIRS = \
 		$(TEST_DIR)/timer_definition_unittest.include \
 		$(TARGET_DIR)/$(call get_base_target,$1)
 
-transponder_ir_unittest_SRC := \
-		$(USER_DIR)/drivers/transponder_ir_ilap.c \
-		$(USER_DIR)/drivers/transponder_ir_arcitimer.c
-
 ws2811_unittest_SRC := \
 		$(USER_DIR)/drivers/light_ws2811strip.c
 
@@ -360,14 +356,6 @@ huffman_unittest_SRC := \
 
 huffman_unittest_DEFINES := \
 		USE_HUFFMAN=
-
-rcdevice_unittest_SRC := \
-		$(USER_DIR)/common/crc.c \
-		$(USER_DIR)/common/bitarray.c \
-		$(USER_DIR)/fc/rc_modes.c \
-		$(USER_DIR)/io/rcdevice.c \
-		$(USER_DIR)/io/rcdevice_cam.c \
-		$(USER_DIR)/pg/pg.c \
 
 pid_unittest_SRC :=  \
 		$(USER_DIR)/common/filter.c \
@@ -380,28 +368,7 @@ pid_unittest_SRC :=  \
 pid_unittest_DEFINES := \
 		USE_ITERM_RELAX= \
 		USE_RC_SMOOTHING_FILTER= \
-		USE_ABSOLUTE_CONTROL= \
-		USE_LAUNCH_CONTROL=
-
-rcdevice_unittest_DEFINES := \
-		USE_RCDEVICE=
-
-vtx_unittest_SRC := \
-		$(USER_DIR)/fc/core.c \
-		$(USER_DIR)/fc/dispatch.c \
-		$(USER_DIR)/fc/rc_controls.c \
-		$(USER_DIR)/fc/rc_modes.c \
-		$(USER_DIR)/fc/runtime_config.c \
-		$(USER_DIR)/drivers/vtx_common.c \
-		$(USER_DIR)/drivers/vtx_table.c \
-		$(USER_DIR)/io/vtx_control.c \
-		$(USER_DIR)/io/vtx.c \
-		$(USER_DIR)/common/bitarray.c
-
-vtx_unittest_DEFINES := \
-		USE_VTX_COMMON= \
-		USE_VTX_CONTROL= \
-		USE_VTX_SMARTAUDIO=
+		USE_ABSOLUTE_CONTROL= 
 
 rx_spi_spektrum_unittest_SRC := \
 		$(USER_DIR)/rx/cyrf6936_spektrum.c

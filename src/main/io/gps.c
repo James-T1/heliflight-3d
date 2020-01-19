@@ -43,7 +43,6 @@
 #include "drivers/light_led.h"
 #include "drivers/time.h"
 
-#include "io/dashboard.h"
 #include "io/gps.h"
 #include "io/serial.h"
 
@@ -1240,11 +1239,6 @@ static bool gpsNewFrameUBLOX(uint8_t data)
 static void gpsHandlePassthrough(uint8_t data)
 {
      gpsNewData(data);
- #ifdef USE_DASHBOARD
-     if (featureIsEnabled(FEATURE_DASHBOARD)) {
-         dashboardUpdate(micros());
-     }
- #endif
 
  }
 
@@ -1255,12 +1249,6 @@ void gpsEnablePassthrough(serialPort_t *gpsPassthroughPort)
 
     if (!(gpsPort->mode & MODE_TX))
         serialSetMode(gpsPort, gpsPort->mode | MODE_TX);
-
-#ifdef USE_DASHBOARD
-    if (featureIsEnabled(FEATURE_DASHBOARD)) {
-        dashboardShowFixedPage(PAGE_GPS);
-    }
-#endif
 
     serialPassthrough(gpsPort, gpsPassthroughPort, &gpsHandlePassthrough, NULL);
 }

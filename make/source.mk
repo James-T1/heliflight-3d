@@ -46,9 +46,6 @@ COMMON_SRC = \
             drivers/system.c \
             drivers/timer_common.c \
             drivers/timer.c \
-            drivers/transponder_ir_arcitimer.c \
-            drivers/transponder_ir_ilap.c \
-            drivers/transponder_ir_erlt.c \
             fc/board_info.c \
             fc/dispatch.c \
             fc/hardfaults.c \
@@ -58,10 +55,7 @@ COMMON_SRC = \
             io/beeper.c \
             io/piniobox.c \
             io/serial.c \
-            io/smartaudio_protocol.c \
             io/statusindicator.c \
-            io/tramp_protocol.c \
-            io/transponder_ir.c \
             io/usb_cdc_hid.c \
             io/usb_msc.c \
             msp/msp.c \
@@ -75,7 +69,6 @@ COMMON_SRC = \
             target/config_helper.c \
             fc/init.c \
             fc/controlrate_profile.c \
-            drivers/camera_control.c \
             drivers/accgyro/gyro_sync.c \
             drivers/pwm_esc_detect.c \
             drivers/pwm_output.c \
@@ -115,7 +108,6 @@ COMMON_SRC = \
             rx/sbus_channels.c \
             rx/spektrum.c \
             rx/srxl2.c \
-            io/spektrum_vtx_control.c \
             io/spektrum_rssi.c \
             rx/sumd.c \
             rx/sumh.c \
@@ -141,28 +133,17 @@ COMMON_SRC = \
             cms/cms_menu_osd.c \
             cms/cms_menu_power.c \
             cms/cms_menu_saveexit.c \
-            cms/cms_menu_vtx_common.c \
-            cms/cms_menu_vtx_rtc6705.c \
-            cms/cms_menu_vtx_smartaudio.c \
-            cms/cms_menu_vtx_tramp.c \
-            drivers/display_ug2864hsweg01.c \
             drivers/light_ws2811strip.c \
             drivers/rangefinder/rangefinder_hcsr04.c \
             drivers/rangefinder/rangefinder_lidartf.c \
             drivers/serial_escserial.c \
-            drivers/vtx_common.c \
-            drivers/vtx_table.c \
-            io/dashboard.c \
             io/displayport_frsky_osd.c \
             io/displayport_max7456.c \
             io/displayport_msp.c \
-            io/displayport_oled.c \
             io/displayport_srxl.c \
             io/displayport_crsf.c \
             io/displayport_hott.c \
             io/frsky_osd.c \
-            io/rcdevice_cam.c \
-            io/rcdevice.c \
             io/gps.c \
             io/ledstrip.c \
             io/pidaudio.c \
@@ -182,12 +163,7 @@ COMMON_SRC = \
             telemetry/msp_shared.c \
             telemetry/ibus.c \
             telemetry/ibus_shared.c \
-            sensors/esc_sensor.c \
-            io/vtx.c \
-            io/vtx_rtc6705.c \
-            io/vtx_smartaudio.c \
-            io/vtx_tramp.c \
-            io/vtx_control.c
+            sensors/esc_sensor.c
 
 COMMON_DEVICE_SRC = \
             $(CMSIS_SRC) \
@@ -292,7 +268,6 @@ SIZE_OPTIMISED_SRC := $(SIZE_OPTIMISED_SRC) \
             drivers/compass/compass_hmc5883l.c \
             drivers/compass/compass_qmc5883l.c \
             drivers/compass/compass_lis3mdl.c \
-            drivers/display_ug2864hsweg01.c \
             drivers/inverter.c \
             drivers/light_ws2811strip.c \
             drivers/light_ws2811strip_hal.c \
@@ -303,23 +278,16 @@ SIZE_OPTIMISED_SRC := $(SIZE_OPTIMISED_SRC) \
             drivers/serial_uart_init.c \
             drivers/serial_uart_pinconfig.c \
             drivers/serial_usb_vcp.c \
-            drivers/transponder_ir_io_hal.c \
-            drivers/transponder_ir_io_stdperiph.c \
-            drivers/vtx_rtc6705_soft_spi.c \
-            drivers/vtx_rtc6705.c \
-            drivers/vtx_common.c \
             fc/init.c \
             fc/board_info.c \
             config/config_eeprom.c \
             config/feature.c \
             config/config_streamer.c \
             i2c_bst.c \
-            io/dashboard.c \
             io/serial.c \
             io/serial_4way.c \
             io/serial_4way_avrootloader.c \
             io/serial_4way_stk500v2.c \
-            io/transponder_ir.c \
             io/usb_cdc_hid.c \
             msp/msp_serial.c \
             cms/cms.c \
@@ -334,16 +302,6 @@ SIZE_OPTIMISED_SRC := $(SIZE_OPTIMISED_SRC) \
             cms/cms_menu_osd.c \
             cms/cms_menu_power.c \
             cms/cms_menu_saveexit.c \
-            cms/cms_menu_vtx_common.c \
-            cms/cms_menu_vtx_rtc6705.c \
-            cms/cms_menu_vtx_smartaudio.c \
-            cms/cms_menu_vtx_tramp.c \
-            io/vtx.c \
-            io/vtx_rtc6705.c \
-            io/vtx_smartaudio.c \
-            io/vtx_tramp.c \
-            io/vtx_control.c \
-            io/spektrum_vtx_control.c \
             osd/osd.c \
             osd/osd_elements.c
 

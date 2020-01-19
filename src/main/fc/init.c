@@ -48,7 +48,6 @@
 #include "drivers/bus_quadspi.h"
 #include "drivers/bus_spi.h"
 #include "drivers/buttons.h"
-#include "drivers/camera_control.h"
 #include "drivers/compass/compass.h"
 #include "drivers/dma.h"
 #include "drivers/exti.h"
@@ -73,14 +72,10 @@
 #include "drivers/system.h"
 #include "drivers/time.h"
 #include "drivers/timer.h"
-#include "drivers/transponder_ir.h"
 #include "drivers/usb_io.h"
 #ifdef USE_USB_MSC
 #include "drivers/usb_msc.h"
 #endif
-#include "drivers/vtx_common.h"
-#include "drivers/vtx_rtc6705.h"
-#include "drivers/vtx_table.h"
 
 #include "fc/board_info.h"
 #include "config/config.h"
@@ -100,7 +95,6 @@
 
 #include "io/asyncfatfs/asyncfatfs.h"
 #include "io/beeper.h"
-#include "io/dashboard.h"
 #include "io/displayport_frsky_osd.h"
 #include "io/displayport_max7456.h"
 #include "io/displayport_msp.h"
@@ -112,15 +106,8 @@
 #include "io/motors.h"
 #include "io/pidaudio.h"
 #include "io/piniobox.h"
-#include "io/rcdevice_cam.h"
 #include "io/serial.h"
 #include "io/servos.h"
-#include "io/transponder_ir.h"
-#include "io/vtx.h"
-#include "io/vtx_control.h"
-#include "io/vtx_rtc6705.h"
-#include "io/vtx_smartaudio.h"
-#include "io/vtx_tramp.h"
 
 #include "msc/emfat_file.h"
 #ifdef USE_PERSISTENT_MSC_RTC
@@ -150,7 +137,6 @@
 #include "pg/rx_spi.h"
 #include "pg/sdcard.h"
 #include "pg/vcd.h"
-#include "pg/vtx_io.h"
 
 #include "rx/rx.h"
 #include "rx/spektrum.h"
@@ -670,14 +656,6 @@ void init(void)
 #endif
 
 
-#ifdef USE_VTX_RTC6705
-    bool useRTC6705 = rtc6705IOInit(vtxIOConfig());
-#endif
-
-#ifdef USE_CAMERA_CONTROL
-    cameraControlInit();
-#endif
-
 // XXX These kind of code should goto target/config.c?
 // XXX And these no longer work properly as FEATURE_RANGEFINDER does control HCSR04 runtime configuration.
 #if defined(RANGEFINDER_HCSR04_SOFTSERIAL2_EXCLUSIVE) && defined(USE_RANGEFINDER_HCSR04) && defined(USE_SOFTSERIAL2)
@@ -803,14 +781,6 @@ void init(void)
     usbCableDetectInit();
 #endif
 
-#ifdef USE_TRANSPONDER
-    if (featureIsEnabled(FEATURE_TRANSPONDER)) {
-        transponderInit();
-        transponderStartRepeating();
-        systemState |= SYSTEM_STATE_TRANSPONDER_ENABLED;
-    }
-#endif
-
 #ifdef USE_FLASH_CHIP
     if (!(initFlags & FLASH_INIT_ATTEMPTED)) {
         flashInit(flashConfig());
@@ -845,33 +815,6 @@ void init(void)
     baroStartCalibration();
 #endif
 
-#if defined(USE_VTX_COMMON) || defined(USE_VTX_CONTROL)
-    vtxTableInit();
-#endif
-
-#ifdef USE_VTX_CONTROL
-    vtxControlInit();
-
-#if defined(USE_VTX_COMMON)
-    vtxCommonInit();
-#endif
-
-#ifdef USE_VTX_SMARTAUDIO
-    vtxSmartAudioInit();
-#endif
-
-#ifdef USE_VTX_TRAMP
-    vtxTrampInit();
-#endif
-
-#ifdef USE_VTX_RTC6705
-    if (!vtxCommonDevice() && useRTC6705) { // external VTX takes precedence when configured.
-        vtxRTC6705Init();
-    }
-#endif
-
-#endif // VTX_CONTROL
-
 #ifdef USE_TIMER
     // start all timers
     // TODO - not implemented yet
@@ -888,21 +831,6 @@ void init(void)
 #endif
 
     batteryInit(); // always needs doing, regardless of features.
-
-#ifdef USE_DASHBOARD
-    if (featureIsEnabled(FEATURE_DASHBOARD)) {
-#ifdef USE_OLED_GPS_DEBUG_PAGE_ONLY
-        dashboardShowFixedPage(PAGE_GPS);
-#else
-        dashboardResetPageCycling();
-        dashboardEnablePageCycling();
-#endif
-    }
-#endif
-
-#ifdef USE_RCDEVICE
-    rcdeviceInit();
-#endif // USE_RCDEVICE
 
 #ifdef USE_PERSISTENT_STATS
     statsInit();
@@ -985,13 +913,6 @@ void init(void)
     // If BFOSD is not active, then register MSP_DISPLAYPORT as a CMS device.
     if (!osdDisplayPort)
         cmsDisplayPortRegister(displayPortMspInit());
-#endif
-
-#ifdef USE_DASHBOARD
-    // Dashbord will register with CMS by itself.
-    if (featureIsEnabled(FEATURE_DASHBOARD)) {
-        dashboardInit();
-    }
 #endif
 
 #if defined(USE_CMS) && defined(USE_SPEKTRUM_CMS_TELEMETRY) && defined(USE_TELEMETRY_SRXL)

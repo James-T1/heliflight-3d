@@ -36,17 +36,6 @@
 #undef USE_ESC_SENSOR_TELEMETRY
 #endif
 
-// XXX Followup implicit dependencies among DASHBOARD, display_xxx and USE_I2C.
-// XXX This should eventually be cleaned up.
-#ifndef USE_I2C
-#undef USE_I2C_OLED_DISPLAY
-#undef USE_DASHBOARD
-#else
-#ifdef USE_DASHBOARD
-#define USE_I2C_OLED_DISPLAY
-#endif
-#endif
-
 // XXX Remove USE_BARO_BMP280 and USE_BARO_MS5611 if USE_I2C is not defined.
 // XXX This should go away buy editing relevant target.h files
 #if !defined(USE_I2C)
@@ -131,15 +120,6 @@
 
 #if !defined(USE_TELEMETRY_SMARTPORT) && !defined(USE_TELEMETRY_CRSF)
 #undef USE_MSP_OVER_TELEMETRY
-#endif
-
-/* If either VTX_CONTROL or VTX_COMMON is undefined then remove common code and device drivers */
-#if !defined(USE_VTX_COMMON) || !defined(USE_VTX_CONTROL)
-#undef USE_VTX_COMMON
-#undef USE_VTX_CONTROL
-#undef USE_VTX_TRAMP
-#undef USE_VTX_SMARTAUDIO
-#undef USE_VTX_TABLE
 #endif
 
 #if defined(USE_RX_FRSKY_SPI_D) || defined(USE_RX_FRSKY_SPI_X)
