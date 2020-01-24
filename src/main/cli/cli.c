@@ -5424,7 +5424,7 @@ static void cliDshotTelemetryInfo(char *cmdline)
 #endif
         for (uint8_t i = 0; i < getMotorCount(); i++) {
             // HF3D TODO:  Make motorPoleCount an array for differnet main/tail pole counts, update CLI/MSP telemetry/LUA/configurator to match
-            if i == 1 {         // Tail motor
+            if (i == 1) {         // Tail motor
                 cliPrintf("%5d   %7d   %6d   %5d   ", i,
                       (int)getDshotTelemetry(i) * 100,
                       (int)getDshotTelemetry(i) * 100 * 2 / 12,

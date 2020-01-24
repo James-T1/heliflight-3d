@@ -63,7 +63,8 @@ typedef struct rpmNotchFilter_s
     biquadFilter_t notch[XYZ_AXIS_COUNT][MAX_SUPPORTED_MOTORS][RPM_FILTER_MAXHARMONICS];
 } rpmNotchFilter_t;
 
-FAST_RAM_ZERO_INIT static float   erpmToHz;     // HF3D TODO:  Change erpmToHz to array to allow for 2 different motors (main and tail)
+FAST_RAM_ZERO_INIT static float   erpmToHz;      // HF3D TODO:  Change erpmToHz to array to allow for 2 different motors (main and tail)
+FAST_RAM_ZERO_INIT static float   erpmToHz1;     // HF3D TODO:  Change erpmToHz to array to allow for 2 different motors (main and tail)
 FAST_RAM_ZERO_INIT static float   filteredMotorErpm[MAX_SUPPORTED_MOTORS];
 FAST_RAM_ZERO_INIT static float   minMotorFrequency;
 FAST_RAM_ZERO_INIT static uint8_t numberFilters;
@@ -245,7 +246,7 @@ FAST_CODE_NOINLINE void rpmFilterUpdate()
                     currentMotor = 0;
                 }
                 // HF3D TODO:  Change erpmToHz to array to allow for 2 different motors (main and tail)
-                if currentMotor == 1 {
+                if (currentMotor == 1) {
                     // Tail motor uses erpmToHz1
                     motorFrequency[currentMotor] = erpmToHz1 * filteredMotorErpm[currentMotor];
                 } else {
@@ -281,7 +282,7 @@ float rpmMinMotorFrequency()
 float rpmGetFilteredMotorRPM(int motor)
 {
     // HF3D TODO:  Change erpmToHz to array to allow for 2 different motors (main and tail)
-    if motor == 1 {
+    if (motor == 1) {
         return (filteredMotorErpm[motor] * erpmToHz1 * SECONDS_PER_MINUTE);    // return filtered tail motor RPM
     } else {
         return (filteredMotorErpm[motor] * erpmToHz * SECONDS_PER_MINUTE);     // return filtered main/other motor RPM

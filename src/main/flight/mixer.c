@@ -708,6 +708,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
     //     * If used, tail motor should have 100% yaw mixing
     //     * mmix 1 (tail motor) uses the Throttle% to determine tailMotorBaseThrustGain
     //     *    1.0 would be way too high.  Full tail thrust when head is at 100% rpm.
+    float mainMotorThrottle = 0.0f;        // Used by the tail code to set the base tail motor output as a fraction of main motor output
     
     // Handle MAIN motor (motor[0]) throttle output & spool-up
     if (motorCount > 0) {
@@ -719,7 +720,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         //   5 seconds = num_loops * 125uS looptime =>  num_loops = 5/.000125 = 40,000 loops for full spool-up from 0% to 100%
         //   Divide 40,000 loops by 1000 PWM steps ==>  Allow 1 step for every 40 pid loop executions  (5ms per step)
         float rampTime = activeMixer[0].throttle;       // HF3D TODO:  Move configuration value for throttle ramp rate off mmix.throttle to a new configuration parameter
-        static uint16_t rampDivider = (uint16_t)(rampTime / (targetPidLooptime*1000));      // Move to init
+        uint16_t rampDivider = (uint16_t)(rampTime / (targetPidLooptime*1000));      // Move to init
         
         // HF3D TODO:  Call governor code with the desired throttle setting for the main motor
         //   Determine if it should be called before or after spool-up code...
@@ -767,7 +768,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
             lastSpoolTarget = throttle;        // Allow spool target to reduce with throttle freely
         }
         
-        static float mainMotorThrottle = throttle;        // Used by the tail code to set the base tail motor output as a fraction of main motor output
+        mainMotorThrottle = throttle;        // Used by the tail code to set the base tail motor output as a fraction of main motor output
         // Original code to scale throttle to motor output range
         float motorOutput = motorOutputMin + motorOutputRange * throttle;
         if (failsafeIsActive()) {
@@ -803,7 +804,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         //   Divider should be the maximum headspeed the heli can achieve
         // HF3D TODO:  Add divider RPM to the user configuration.... or at least just use the "max governed RPM" value that will be used for a governor.
         float tailMotorBaseThrustGain = activeMixer[1].throttle;            // HF3D TODO:  Move configuration value to a new configuration parameter
-        if mainMotorThrottle < 0.4f {
+        if (mainMotorThrottle < 0.4f) {
             motorOutput += (mainMotorThrottle * tailMotorBaseThrustGain);   // Track the main motor output while spooling up (looks cool for them to both spool up at once)
         } else {
             motorOutput += (0.4f * tailMotorBaseThrustGain);                // Set fixed base thrust since lower headspeeds actually require higher base thrust.  Not sure what to think about doing here.
