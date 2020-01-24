@@ -717,7 +717,9 @@ bool processRx(timeUs_t currentTimeUs)
     //   spooledUp will set to "1" the first time if it's a "clean" spoolup where you arm and spool to a single throttle setpoint
     //   If user spools up above 1000rpm, then lowers throttle below the last spool target reached, the heli will be considered spooled up
     //Old code w/airMode:   if (throttleStatus == THROTTLE_LOW && !airmodeIsActivated) {
-    if (throttleStatus == THROTTLE_LOW || !isHeliSpooledUp()) {
+    // HF3D:  Get rid of iTerms when throttle is off?  Probably not a good idea if we want control during autorotations??
+    //if (throttleStatus == THROTTLE_LOW || !isHeliSpooledUp()) {
+    if (!isHeliSpooledUp()) {
         pidSetItermReset(true);                                // Reset all I terms and absolute control accumulated error
         if (currentPidProfile->pidAtMinThrottle)               // Defaults to true.  No CLI setting for this either?
             pidStabilisationState(PID_STABILISATION_ON);       // Enable stabilization for the aircraft
