@@ -55,6 +55,7 @@
 // we need 4 steps for each axis
 #define DYN_NOTCH_CALC_TICKS      (XYZ_AXIS_COUNT * 4)
 
+// we won't update dynNotchMaxFFT unless throttle percent is above this value
 #define DYN_NOTCH_OSD_MIN_THROTTLE 20
 
 static uint16_t FAST_RAM_ZERO_INIT   fftSamplingRateHz;
@@ -75,6 +76,7 @@ static FAST_RAM_ZERO_INIT float hanningWindow[FFT_WINDOW_SIZE];
 void gyroDataAnalyseInit(uint32_t targetLooptimeUs)
 {
 #ifdef USE_MULTI_GYRO
+    // Prevent executing gyroDataAnalyseInit more than once
     static bool gyroAnalyseInitialized;
     if (gyroAnalyseInitialized) {
         return;
@@ -149,6 +151,7 @@ void gyroDataAnalyseStateInit(gyroAnalyseState_t *state, uint32_t targetLooptime
     }
 }
 
+// receive gyro data samples for each axis from gyro_filter_impl.c
 void gyroDataAnalysePush(gyroAnalyseState_t *state, const int axis, const float sample)
 {
     state->oversampledGyroAccumulator[axis] += sample;
@@ -326,6 +329,7 @@ static FAST_CODE_NOINLINE void gyroDataAnalyseUpdate(gyroAnalyseState_t *state, 
             state->prevCenterFreq[state->updateAxis] = state->centerFreq[state->updateAxis];
             state->centerFreq[state->updateAxis] = centerFreq;
 
+            // Only update dynNotchMaxFFT from centerFreq if throttle command >20%
             if(calculateThrottlePercentAbs() > DYN_NOTCH_OSD_MIN_THROTTLE) {
                 dynNotchMaxFFT = MAX(dynNotchMaxFFT, state->centerFreq[state->updateAxis]);
             }

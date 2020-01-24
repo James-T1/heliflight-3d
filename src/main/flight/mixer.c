@@ -92,6 +92,14 @@ static motorMixer_t currentMixer[MAX_SUPPORTED_MOTORS];
 
 static FAST_RAM_ZERO_INIT int throttleAngleCorrection;
 
+// HF3D TODO:  Move governor logic to separate source file
+static FAST_RAM_ZERO_INIT int spoolLoopCount;
+static FAST_RAM_ZERO_INIT float lastSpoolTarget;
+static FAST_RAM_ZERO_INIT uint8_t spooledUp;
+
+
+// HF3D TODO:  Remove all the useless mixers and replace them with CCPM mixes for helicopters
+//     May require updating configurator?
 static const motorMixer_t mixerQuadX[] = {
     { 1.0f, -1.0f,  1.0f, -1.0f },          // REAR_R
     { 1.0f, -1.0f, -1.0f,  1.0f },          // FRONT_R
@@ -341,6 +349,10 @@ void initEscEndpoints(void)
     motorInitEndpoints(motorOutputLimit, &motorOutputLow, &motorOutputHigh, &disarmMotorOutput, &deadbandMotor3dHigh, &deadbandMotor3dLow);
 
     rcCommandThrottleRange = PWM_RANGE_MAX - PWM_RANGE_MIN;
+    
+    spoolLoopCount = 0;       // HF3D TODO:  Move to a separate governor source file
+    lastSpoolTarget = 0.0f;
+    spooledUp = 0;
 }
 
 void mixerInit(mixerMode_e mixerMode)
@@ -370,8 +382,9 @@ void mixerConfigureOutput(void)
     if (currentMixerMode == MIXER_CUSTOM || currentMixerMode == MIXER_CUSTOM_TRI || currentMixerMode == MIXER_CUSTOM_AIRPLANE) {
         // load custom mixer into currentMixer
         for (int i = 0; i < MAX_SUPPORTED_MOTORS; i++) {
-            // check if done
-            if (customMotorMixer(i)->throttle == 0.0f) {
+            // Check if done by seeing if this motor has any mixing
+            // HF3D:  Also allow for tail motors by checking if motor is assigned to Yaw channel OR Throttle channel
+            if ((customMotorMixer(i)->throttle == 0.0f) && (customMotorMixer(i)->yaw == 0.0f)) {
                 break;
             }
             currentMixer[i] = *customMotorMixer(i);
@@ -586,15 +599,24 @@ static void calculateThrottleAndCurrentMotorEndpoints(timeUs_t currentTimeUs)
             
         }
 #endif
+        // if not in 3D mode:    rcCommandThrottleRange = PWM_RANGE_MAX - PWM_RANGE_MIN;
         currentThrottleInputRange = rcCommandThrottleRange;
+        // if DynIdle not used:  motorRangeMinIncrease = 0
         motorRangeMin = motorOutputLow + motorRangeMinIncrease * (motorOutputHigh - motorOutputLow);
         motorRangeMax = motorOutputHigh;
         motorOutputMin = motorRangeMin;
+        // if DynIdle not used:  motorOutputRange = motorOutputHigh - motorOutputLow
         motorOutputRange = motorOutputHigh - motorOutputMin;
         motorOutputMixSign = 1;
     }
 
+    // if not in 3D Mode and DynIdle not used:  throttle = rcCommand[THROTTLE] - PWM_RANGE_MIN + throttleAngleCorrection;
+    //    so, without throttleAngleCorrection:  throttle = rcCommand[THROTTLE]
+    // Throttle Angle Correction is probably not a great idea for helicopters.
+    //    To disable Throttle Angle Correction, set:  throttleCorrectionConfig()->throttle_correction_value = 0
     throttle = constrainf(throttle / currentThrottleInputRange, 0.0f, 1.0f);
+    //    and without any extra features:       throttle = rcCommand[THROTTLE] / (PWM_RANGE_MAX - PWM_RANGE_MIN)
+    //    Essentially just converting throttle from a value in microseconds to a float between 0.0 and 1.0
 }
 
 #define CRASH_FLIP_DEADBAND 20
@@ -678,13 +700,165 @@ static void applyFlipOverAfterCrashModeToMotors(void)
 
 static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t *activeMixer)
 {
-    // Now add in the desired throttle, but keep in a range that doesn't clip adjusted
-    // roll/pitch/yaw. This could move throttle down, but also up for those low throttle flips.
-    for (int i = 0; i < motorCount; i++) {
-        float motorOutput = motorOutputMixSign * motorMix[i] + throttle * activeMixer[i].throttle;
+    // HF3D: Re-wrote this section for main and optional tail motor use.  No longer valid for multirotors.
+    //   Main motor must be motor[0] (Motor 0)
+    //     * Use resource assignment to reassign output pin on board for main motor ESC to Motor 1
+    //     * mmix 0 uses the Throttle% to determine ramp rate
+    //   Tail motor is optional and must be motor[1] (Motor 1)
+    //     * If used, tail motor should have 100% yaw mixing
+    //     * mmix 1 (tail motor) uses the Throttle% to determine tailMotorBaseThrustGain
+    //     *    1.0 would be way too high.  Full tail thrust when head is at 100% rpm.
+    
+    // Handle MAIN motor (motor[0]) throttle output & spool-up
+    if (motorCount > 0) {
+        // We're stealing the mmix throttle% section on motor 0 to be our ramp rate instead. 
+        // Ramp rate is how many seconds to go from 0rpm to 100% pwm output
+        // Calculate number of PID loops per 1/1000th PWM step to achieve the requested ramp rate:
+        // targetPidLooptime is in microseconds...
+        // Throttle = 5% ==> 5 seconds to spool up....
+        //   5 seconds = num_loops * 125uS looptime =>  num_loops = 5/.000125 = 40,000 loops for full spool-up from 0% to 100%
+        //   Divide 40,000 loops by 1000 PWM steps ==>  Allow 1 step for every 40 pid loop executions  (5ms per step)
+        float rampTime = activeMixer[0].throttle;       // HF3D TODO:  Move configuration value for throttle ramp rate off mmix.throttle to a new configuration parameter
+        static uint16_t rampDivider = (uint16_t)(rampTime / (targetPidLooptime*1000));      // Move to init
+        
+        // HF3D TODO:  Call governor code with the desired throttle setting for the main motor
+        //   Determine if it should be called before or after spool-up code...
+        //   Probably before since we want to know what the rcCommand was and not necessarily the scaled value
+        //   In fact... it would probably be best to just reference throttle into the governor from somewhere else in the future.
+        
+        // MVP:  If Main Motor RPM <1000, then reset spooledUp flag and use spooledUp logic
+        // HF3D TODO:  Add auto-rotation mode that ignores this check, or at least decreases the ramp time significantly.
+        float mainMotorRPM = rpmGetFilteredMotorRPM(0);    // Get main motor rpm  --- what about calcESCrpm if DSHOT not available, but normal ESC telemetry is?
+        if (mainMotorRPM < 1000.0f) {
+            spooledUp = 0;
+        } else if (throttle < lastSpoolTarget) {
+            // If user spools up above 1000rpm, then lowers throttle below the last spool target, allow the heli to be considered spooled up
+            spooledUp = 1;
+        }
+        
+        // Skip spooling logic if no throttle signal or if we're disarmed
+        if ((throttle == 0.0f) || !ARMING_FLAG(ARMED)) {
+            // Don't reset spooledUp flag because we want throttle to respond quickly if user drops throttle in normal mode or re-arms while blades are still spinning > 1000rpm
+            //   spooledUp flag will reset anyway if RPM < 1000
+            lastSpoolTarget = 0.0f;         // Require re-spooling to start from zero if RPM<1000 and throttle=0 or disarmed
+        
+        // If not spooled up and throttle is higher than our last spooled-up output
+        } else if (!spooledUp && (lastSpoolTarget < throttle)) {
+                    
+            // Only spool up every rampDivider times through the PID loop
+            if (spoolLoopCount != rampDivider) {
+                spoolLoopCount++;           // Increment our counter if it's not up to the rampDivider value
+                throttle = lastSpoolTarget;    // Prevent throttle from increasing by setting it back to the previous throttle setting allowed by spool-up
+            } else {
+                // Allow spooling to continue on this ramp step
+                spoolLoopCount = 0;         // Reset our counter to restart the spool-up
+
+                // Only allow throttle to ramp up a little bit
+                if ((lastSpoolTarget + 0.001f) < throttle) {
+                    throttle = lastSpoolTarget + 0.001f;
+                } else {
+                    // Let throttle fall through unchanged and set spooledUp flag
+                    spooledUp = 1;
+                }
+                
+                lastSpoolTarget = throttle;    // Store the throttle value for use in the next loop
+            }
+        } else if (lastSpoolTarget > throttle) {
+            lastSpoolTarget = throttle;        // Allow spool target to reduce with throttle freely
+        }
+        
+        static float mainMotorThrottle = throttle;        // Used by the tail code to set the base tail motor output as a fraction of main motor output
+        // Original code to scale throttle to motor output range
+        float motorOutput = motorOutputMin + motorOutputRange * throttle;
+        if (failsafeIsActive()) {
+#ifdef USE_DSHOT
+            if (isMotorProtocolDshot()) {
+                motorOutput = (motorOutput < motorRangeMin) ? disarmMotorOutput : motorOutput; // Prevent getting into special reserved range
+            }
+#endif
+            motorOutput = constrain(motorOutput, disarmMotorOutput, motorRangeMax);
+        } else {
+            motorOutput = constrain(motorOutput, motorRangeMin, motorRangeMax);
+        }
+        motor[0] = motorOutput;
+        
+    } // end of Main Motor handling (motor[0])
+
+    // Handle the TAIL motor mixing & control (motor[1])
+    // HF3D TODO:  Eventually need to support motor driven + variable pitch combination tails
+    if (motorCount > 1) {
+
+        // motorMix for tail motor should be 100% stabilized yaw channel
+        float motorOutput = motorOutputMixSign * motorMix[1];
+        
+        // Linearize the tail motor thrust  (pidApplyThrustLinearization)
 #ifdef USE_THRUST_LINEARIZATION
+        // Scale PID sums and throttle to linearize the system (thrust varies with rpm^2)
+        //   https://github.com/betaflight/betaflight/pull/7304
         motorOutput = pidApplyThrustLinearization(motorOutput);
 #endif
+
+        // Add in base tail motor thrust to compensate for the main shaft torque
+        // Base thrust should vary with main motor RPM^2, but our tail motor also has thrust^2, so increase in base thrust will be linear
+        //   Divider should be the maximum headspeed the heli can achieve
+        // HF3D TODO:  Add divider RPM to the user configuration.... or at least just use the "max governed RPM" value that will be used for a governor.
+        float tailMotorBaseThrustGain = activeMixer[1].throttle;            // HF3D TODO:  Move configuration value to a new configuration parameter
+        if mainMotorThrottle < 0.4f {
+            motorOutput += (mainMotorThrottle * tailMotorBaseThrustGain);   // Track the main motor output while spooling up (looks cool for them to both spool up at once)
+        } else {
+            motorOutput += (0.4f * tailMotorBaseThrustGain);                // Set fixed base thrust since lower headspeeds actually require higher base thrust.  Not sure what to think about doing here.
+            //  Base thrust probably needs to be "load" based.... so feed-forward that takes into account the blade pitch, rpms, etc.
+            //  Even then, the relative velocity of the heli through the air will change the loading at the same blade pitch.
+            //  Maybe if we had instantaneous motor power telemetry available (watts) we could calculate instantaneous motor torque from watts and RPMs.
+            //    This would give us a nearly perfect estimator of how much tail thrust is needed to counteract the motor shaft torque?
+        }
+        
+        //motorOutput += (mainMotorThrottle * tailMotorBaseThrustGain);       // Probably something like 0.2 would be a good setting for this?  Just a guess.
+        //  ^^ Actually, I think this is a bad idea.  Base tail thrust will actually need to INCREASE for lower headspeeds.  Lower mainshaft rpm with some power input = more torque necessary.
+        //motorOutput += (mainMotorRPM/6000.0f)*tailMotorBaseThrustGain;    // Just guessing that 20% thrust on tail will be about right for 100% rpm on head.  Nevermind, see above.  This is wrong.
+
+        // scale to full motor output range
+        motorOutput = motorOutputMin + motorOutputRange * motorOutput;
+
+        if (failsafeIsActive()) {
+#ifdef USE_DSHOT
+            if (isMotorProtocolDshot()) {
+                motorOutput = (motorOutput < motorRangeMin) ? disarmMotorOutput : motorOutput; // Prevent getting into special reserved range
+            }
+#endif
+            motorOutput = constrain(motorOutput, disarmMotorOutput, motorRangeMax);
+        } else {
+            motorOutput = constrain(motorOutput, motorRangeMin, motorRangeMax);
+        }
+        motor[1] = motorOutput;     // Set final tail motor output
+
+    }  // end of tail motor handling
+     
+    // HF3D does not support more than 1 main and 1 tail motor.  Turn any additional motors off.
+    for (int i = 2; i < motorCount; i++) {
+        motor[i] = disarmMotorOutput;
+    }
+
+/*     // Now add in the desired throttle, but keep in a range that doesn't clip adjusted
+    // roll/pitch/yaw. This could move throttle down, but also up for those low throttle flips.
+    for (int i = 0; i < motorCount; i++) {
+        // HF3D:  Motor mix setup for code as it sits now:
+        //   Main motor = motor[0]:
+        //      activeMixer[0].throttle = 1.0       (Throttle channel applied 100% to main motor)
+        //      motorMix[0] = 0.0                   (Yaw/pitch/roll contribution terms = 0)
+        //   Tail motor = motor[1]:
+        //      activeMixer[1].throttle = 0.0       (No throttle applied to tail motor)
+        //      motorMix[1] = constrainf(pidData[FD_YAW].Sum, -yawPidSumLimit, yawPidSumLimit) / PID_MIXER_SCALING;
+        //        (100% of yaw term to the tail motor is how we identify the tail motor)
+        //        PID_MIXER_SCALING = 1000.0f to get pidSum to have similar impact as the -500 to +500 range of the servos?
+        float motorOutput = motorOutputMixSign * motorMix[i] + throttle * activeMixer[i].throttle;
+
+#ifdef USE_THRUST_LINEARIZATION
+        // Scale PID sums and throttle to linearize the system (thrust varies with rpm^2)
+        // https://github.com/betaflight/betaflight/pull/7304
+        motorOutput = pidApplyThrustLinearization(motorOutput);
+#endif
+
         motorOutput = motorOutputMin + motorOutputRange * motorOutput;
 
 #ifdef USE_SERVOS
@@ -703,7 +877,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
             motorOutput = constrain(motorOutput, motorRangeMin, motorRangeMax);
         }
         motor[i] = motorOutput;
-    }
+    } */
 
     // Disarmed mode
     if (!ARMING_FLAG(ARMED)) {
@@ -755,6 +929,7 @@ static void updateDynLpfCutoffs(timeUs_t currentTimeUs, float throttle)
 }
 #endif
 
+// mixTable is called from the main loop calculate the motor and servo mixing
 FAST_CODE_NOINLINE void mixTable(timeUs_t currentTimeUs, uint8_t vbatPidCompensation)
 {
     // Find min and max throttle based on conditions. Throttle has to be known before mixing
@@ -818,6 +993,8 @@ FAST_CODE_NOINLINE void mixTable(timeUs_t currentTimeUs, uint8_t vbatPidCompensa
             scaledAxisPidPitch * activeMixer[i].pitch +
             scaledAxisPidYaw   * activeMixer[i].yaw;
 
+        // HF3D TODO:  VBatt compensation might actually be valid for a motor driven tail?
+        //   Other option is to use a governor to drive the tail motor to an exact RPM target instead of using a throttle setpoint
         mix *= vbatCompensationFactor;  // Add voltage compensation
 
         if (mix > motorMixMax) {
@@ -889,8 +1066,10 @@ FAST_CODE_NOINLINE void mixTable(timeUs_t currentTimeUs, uint8_t vbatPidCompensa
         && !airmodeEnabled
         && !FLIGHT_MODE(GPS_RESCUE_MODE)   // disable motor_stop while GPS Rescue is active
         && (rcData[THROTTLE] < rxConfig()->mincheck)) {
-        // motor_stop handling
+        // Stop all motors by setting them to disarmMotorOutput value.
+        // HF3D:  It's very important that this be done so that tail motor will stop as well.  Tail motor may still have yaw Pidsum mix even if throttle = 0!
         applyMotorStop();
+        // HF3D TODO:  Call governor function to tell it we are in a stopped state
     } else {
         // Apply the mix to motor endpoints
         applyMixToMotors(motorMix, activeMixer);
@@ -927,4 +1106,17 @@ bool isFixedWing(void)
 
         break;
     }
+}
+
+// HF3D TODO:  Move this to governor/spoolup source file eventually
+// Return the status of whether the heli is spooled up
+// Very critical that this status is correct, because core.c checks it to force 
+//     the pid controller to reset it's I term on each pass if this is set.
+uint8_t isHeliSpooledUp(void)
+{
+    // Spooled Up is reset to 0 if (mainMotorRPM < 1000.0f)
+    // spooledUp will set to "1" the first time if it's a "clean" spoolup where you arm and spool to a single throttle setpoint
+    //   Jacking around with the throttle during spoolup could cause it to set the spooledUp flag instantly if you're already above 1000rpm
+    //   If user spools up above 1000rpm, then lowers throttle below the last spool target reached, the heli will be considered spooled up
+    return spooledUp;
 }

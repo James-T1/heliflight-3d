@@ -204,6 +204,8 @@ static motorDevice_t motorNullDevice = {
     .enabled = false,
 };
 
+// HF3D TODO:  Eventually we should probably support using two different ESC protocols for the main and tail motors.
+//   The code as it sits initializes them all with the same output settings.
 void motorDevInit(const motorDevConfig_t *motorConfig, uint16_t idlePulse, uint8_t motorCount) {
     memset(motors, 0, sizeof(motors));
 

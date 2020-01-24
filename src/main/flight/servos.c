@@ -398,9 +398,10 @@ void writeServos(void)
     }
 }
 
+// Generic servo mixing from Cleanflight using user-defined smix values for each servo
 void servoMixer(void)
 {
-    int16_t input[INPUT_SOURCE_COUNT]; // Range [-500:+500]
+    int16_t input[INPUT_SOURCE_COUNT];    // Range [-500:+500]
     static int16_t currentOutput[MAX_SERVO_RULES];
 
     if (FLIGHT_MODE(PASSTHRU_MODE)) {
@@ -410,16 +411,21 @@ void servoMixer(void)
         input[INPUT_STABILIZED_YAW] = rcCommand[YAW];
     } else {
         // Assisted modes (gyro only or gyro+acc according to AUX configuration in Gui
-        input[INPUT_STABILIZED_ROLL] = pidData[FD_ROLL].Sum * PID_SERVO_MIXER_SCALING;
-        input[INPUT_STABILIZED_PITCH] = pidData[FD_PITCH].Sum * PID_SERVO_MIXER_SCALING;
+        // Default PID_SERVO_MIXER_SCALING = 0.7f
+        // HF3D TODO:  Consider using yawPidSumLimit like mixer.c does for motors?
+        //  * Already added roll/pitch pidSumLimit to this code.
+        //    Default pidSumLimit is 500 on roll/pitch and 400 on yaw, with min/max settable range of 100-1000
+        input[INPUT_STABILIZED_ROLL] = constrainf(pidData[FD_ROLL].Sum, -currentPidProfile->pidSumLimit, currentPidProfile->pidSumLimit) * PID_SERVO_MIXER_SCALING;
+        input[INPUT_STABILIZED_PITCH] = constrainf(pidData[FD_PITCH].Sum, -currentPidProfile->pidSumLimit, currentPidProfile->pidSumLimit) * PID_SERVO_MIXER_SCALING;
         input[INPUT_STABILIZED_YAW] = pidData[FD_YAW].Sum * PID_SERVO_MIXER_SCALING;
 
         // Reverse yaw servo when inverted in 3D mode
+        // HF3D:  LOL - Remove this in case somebody enables the 3D mode.  It would kind of be hilarious though.
         if (featureIsEnabled(FEATURE_3D) && (rcData[THROTTLE] < rxConfig()->midrc)) {
             input[INPUT_STABILIZED_YAW] *= -1;
         }
     }
-
+    
     input[INPUT_GIMBAL_PITCH] = scaleRange(attitude.values.pitch, -1800, 1800, -500, +500);
     input[INPUT_GIMBAL_ROLL] = scaleRange(attitude.values.roll, -1800, 1800, -500, +500);
 
@@ -444,34 +450,67 @@ void servoMixer(void)
         servo[i] = 0;
     }
 
-    // mix servos according to rules
-    for (int i = 0; i < servoRuleCount; i++) {
-        // consider rule if no box assigned or box is active
-        if (currentServoMixer[i].box == 0 || IS_RC_MODE_ACTIVE(BOXSERVO1 + currentServoMixer[i].box - 1)) {
-            uint8_t target = currentServoMixer[i].targetChannel;
-            uint8_t from = currentServoMixer[i].inputSource;
-            uint16_t servo_width = servoParams(target)->max - servoParams(target)->min;
-            int16_t min = currentServoMixer[i].min * servo_width / 100 - servo_width / 2;
-            int16_t max = currentServoMixer[i].max * servo_width / 100 - servo_width / 2;
+    // HF3D TODO:  Does swash ring need to be implemented on the rcCommand side also for roll & pitch?
+    //          Or does that just sort of happen by default when it's implemented on the back-end like this?
 
+    // HF3D:  Swash ring (cyclic ring) functionality and maximum swash tilt limiting (maximum cyclic pitch)
+    //   Without swash ring a full corner cyclic stick deflection would result in up to 141% of the maximum tilt in a single axis
+    //   Default pidSum limit = 500 * 0.7 scale factor = 350 for each of roll and pitch
+    //   Combined output for both axis = sqrt(350^2+350^2) = 495 for the maximum roll+pitch command from the pid loop.  
+    //   Divide each by the combined total to scale them down such that the total combined cyclic command equals the max in one axis.
+    const float swashRingTotal = sqrtf(input[INPUT_STABILIZED_ROLL]*input[INPUT_STABILIZED_ROLL] + input[INPUT_STABILIZED_PITCH]*input[INPUT_STABILIZED_PITCH]);
+    
+    // Check if swashRingTotal combination exceeds the maximum possible deflection in any one direction
+    // HF3D TODO:  Be very cautious of increasing PID_SERVO_MIXER_SCALING in the future code!!  
+    //   ** Users may unexpectedly end up with more cyclic pitch than they originally setup if you change it!
+    //   Maybe change the max criteria to something else?  It's actually the physical servo output we want to limit...
+    if (swashRingTotal > (currentPidProfile->pidSumLimit * PID_SERVO_MIXER_SCALING)) {
+        // normalize the roll and pitch values using the maximum if the sum exceeds our max expected value
+        input[INPUT_STABILIZED_ROLL] /= swashRingTotal;
+        input[INPUT_STABILIZED_PITCH] /= swashRingTotal;
+    }
+    // NOTE:  pidSumLimit should be increased until exactly 10 degrees of cyclic pitch is achieved at maximum swash deflection and zero collective pitch
+    //   It's best to start low with pidSumLimit and then increase it while continuing to measure total pitch.  This avoids damage to servos from binding.
+    //   Warning:  More than 10 degrees of available cyclic pitch can lead to boom strikes!!!
+
+    // mix servos according to smix rules
+    //   https://github.com/cleanflight/cleanflight/blob/master/docs/Mixer.md
+    for (int i = 0; i < servoRuleCount; i++) {
+
+        //HF3D:  Skip collective smix rules on the first loop through our smix rules
+        // Was going to use this to process collective after the roll/pitch is processed, but not sure I want to go that route now.
+        // if (currentServoMixer[i].inputSource == INPUT_RC_AUX1) {
+            // continue;
+        // }
+        
+        // consider rule if no box assigned or if box is active
+        if (currentServoMixer[i].box == 0 || IS_RC_MODE_ACTIVE(BOXSERVO1 + currentServoMixer[i].box - 1)) {
+            uint8_t target = currentServoMixer[i].targetChannel;    // output servo channel (0-7)
+            uint8_t from = currentServoMixer[i].inputSource;        // number of the input source for this rule
+            uint16_t servo_width = servoParams(target)->max - servoParams(target)->min;     // we will scale mixer to full range of the associated servo (typically min 1000, max 2000)
+            int16_t min = currentServoMixer[i].min * servo_width / 100 - servo_width / 2;   // min/max range is 0-100.  Typical min:  0*1000/2-1000/2 = -500
+            int16_t max = currentServoMixer[i].max * servo_width / 100 - servo_width / 2;   // Typical max:  100*1000/100-1000/2 = 500
+
+            // See if the smix was setup as being speed limited.
             if (currentServoMixer[i].speed == 0)
-                currentOutput[i] = input[from];
-            else {
+                currentOutput[i] = input[from];       // no speed limit, just store the input to the temporary output
+            else {                                    // speed limit, so increment only up to the allowed amount
                 if (currentOutput[i] < input[from])
                     currentOutput[i] = constrain(currentOutput[i] + currentServoMixer[i].speed, currentOutput[i], input[from]);
                 else if (currentOutput[i] > input[from])
                     currentOutput[i] = constrain(currentOutput[i] - currentServoMixer[i].speed, input[from], currentOutput[i]);
             }
 
+            // add the result of this mix to the servo output accumulator, taking into account the rate (%mix) and min/max limits set for this smix+servo combo
             servo[target] += servoDirection(target, from) * constrain(((int32_t)currentOutput[i] * currentServoMixer[i].rate) / 100, min, max);
         } else {
-            currentOutput[i] = 0;
+            currentOutput[i] = 0;    // don't change servo output for this rule if wrong box is active
         }
     }
 
     for (int i = 0; i < MAX_SUPPORTED_SERVOS; i++) {
-        servo[i] = ((int32_t)servoParams(i)->rate * servo[i]) / 100L;
-        servo[i] += determineServoMiddleOrForwardFromChannel(i);
+        servo[i] = ((int32_t)servoParams(i)->rate * servo[i]) / 100L;        // multiply the calculated servo mixer output by the gain (rate) for that particular servo
+        servo[i] += determineServoMiddleOrForwardFromChannel(i);             // add our result to the center of the servo's range
     }
 }
 
@@ -492,7 +531,7 @@ static void servoTable(void)
     case MIXER_SINGLECOPTER:
     case MIXER_HELI_120_CCPM:
     case MIXER_GIMBAL:
-        servoMixer();
+        servoMixer();          // Run all the generic servo mixing set from smix
         break;
 
     /*
@@ -524,6 +563,7 @@ static void servoTable(void)
     }
 
     // constrain servos
+    //   default min = 1000, max = 2000
     for (int i = 0; i < MAX_SUPPORTED_SERVOS; i++) {
         servo[i] = constrain(servo[i], servoParams(i)->min, servoParams(i)->max); // limit the values
     }

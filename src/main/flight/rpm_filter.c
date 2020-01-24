@@ -63,7 +63,7 @@ typedef struct rpmNotchFilter_s
     biquadFilter_t notch[XYZ_AXIS_COUNT][MAX_SUPPORTED_MOTORS][RPM_FILTER_MAXHARMONICS];
 } rpmNotchFilter_t;
 
-FAST_RAM_ZERO_INIT static float   erpmToHz;
+FAST_RAM_ZERO_INIT static float   erpmToHz;     // HF3D TODO:  Change erpmToHz to array to allow for 2 different motors (main and tail)
 FAST_RAM_ZERO_INIT static float   filteredMotorErpm[MAX_SUPPORTED_MOTORS];
 FAST_RAM_ZERO_INIT static float   minMotorFrequency;
 FAST_RAM_ZERO_INIT static uint8_t numberFilters;
@@ -144,11 +144,22 @@ void rpmFilterInit(const rpmFilterConfig_t *config)
         dtermFilter = NULL;
     }
 
+    // HF3D TODO:  Add RPM filters for head rpm and tail rpm
+    //   Tail rotor rpm should be tail motor rpm if motor-driven tail, or calculated from tail gear ratio if gear/belt driven
+    
     for (int i = 0; i < getMotorCount(); i++) {
+        // init PT1 filter with dT= 0.0005  (Default for 2kHz = 500 pidLooptime)
+        // Default rpm_lpf cutoff = 150Hz with dT=0.0005 ==> k = 0.32
+        //   ===>  1/.32 ~= 3 samples delay for rpm filter to reach steady state
+        //   ===>  3 samples * 0.5ms per sample ~= 1.5ms delay on RPM signal
         pt1FilterInit(&rpmFilters[i], pt1FilterGain(config->rpm_lpf, pidLooptime * 1e-6f));
     }
 
+    // HF3D TODO:  Change erpmToHz and motorPoleCount to array (and update cli/configurator) to allow for 2 different motors (main and tail)
+    //  For now this will only be used by the main motor (motor[0])
     erpmToHz = ERPM_PER_LSB / SECONDS_PER_MINUTE  / (motorConfig()->motorPoleCount / 2.0f);
+    //  Tail motor (motor[1]) erpmToHz for OMP M2 tail motor (12 bell magnets):
+    erpmToHz1 = ERPM_PER_LSB / SECONDS_PER_MINUTE  / (12.0f / 2.0f);
 
     const float loopIterationsPerUpdate = MIN_UPDATE_T / (pidLooptime * 1e-6f);
     numberFilters = getMotorCount() * (filters[0].harmonics + filters[1].harmonics);
@@ -161,19 +172,28 @@ static float applyFilter(rpmNotchFilter_t* filter, int axis, float value)
     if (filter == NULL) {
         return value;
     }
+    
     for (int motor = 0; motor < getMotorCount(); motor++) {
+     
+        // Loop over and apply each set of gyro or dterm filters created for this axis and motor.  
+        //   Default is 3 harmonic filters per motor for each axis
+        //   Filter center frequency is updated separately in rpmFilterUpdate()
         for (int i = 0; i < filter->harmonics; i++) {
             value = biquadFilterApplyDF1(&filter->notch[axis][motor][i], value);
         }
     }
-    return value;
+    return value;   // Return the resulting value after all filters are applied
 }
 
+// Called by gyroUpdate() in gyro.c 
+//   Runs at Gyro looptime (equal to or faster than pidLooptime)
 float rpmFilterGyro(int axis, float value)
 {
     return applyFilter(gyroFilter, axis, value);
 }
 
+// Called by pidController() in pid.c
+//   Runs at pidLooptime  (equal to or slower than Gyro looptime)
 float rpmFilterDterm(int axis, float value)
 {
     return applyFilter(dtermFilter, axis, value);
@@ -181,6 +201,8 @@ float rpmFilterDterm(int axis, float value)
 
 FAST_RAM_ZERO_INIT static float motorFrequency[MAX_SUPPORTED_MOTORS];
 
+// rpmFilterUpdate() is called by pidController() in pid.c
+//   Runs at pidLooptime  (equal to or slower than Gyro looptime)
 FAST_CODE_NOINLINE void rpmFilterUpdate()
 {
     if (gyroFilter == NULL && dtermFilter == NULL) {
@@ -188,6 +210,7 @@ FAST_CODE_NOINLINE void rpmFilterUpdate()
     }
 
     for (int motor = 0; motor < getMotorCount(); motor++) {
+        // Get the motor RPM using bi-directional DSHOT and then filter it using PT1 low-pass filter
         filteredMotorErpm[motor] = pt1FilterApply(&rpmFilters[motor], getDshotTelemetry(motor));
         if (motor < 4) {
             DEBUG_SET(DEBUG_RPM_FILTER, motor, motorFrequency[motor]);
@@ -221,7 +244,13 @@ FAST_CODE_NOINLINE void rpmFilterUpdate()
                 if (++currentMotor == getMotorCount()) {
                     currentMotor = 0;
                 }
-                motorFrequency[currentMotor] = erpmToHz * filteredMotorErpm[currentMotor];
+                // HF3D TODO:  Change erpmToHz to array to allow for 2 different motors (main and tail)
+                if currentMotor == 1 {
+                    // Tail motor uses erpmToHz1
+                    motorFrequency[currentMotor] = erpmToHz1 * filteredMotorErpm[currentMotor];
+                } else {
+                    motorFrequency[currentMotor] = erpmToHz * filteredMotorErpm[currentMotor];
+                }
                 minMotorFrequency = 0.0f;
             }
             currentFilter = &filters[currentFilterNumber];
@@ -248,5 +277,15 @@ float rpmMinMotorFrequency()
     return minMotorFrequency;
 }
 
+// Return low pass filtered motor RPM for HF3D governor or tail motor control
+float rpmGetFilteredMotorRPM(int motor)
+{
+    // HF3D TODO:  Change erpmToHz to array to allow for 2 different motors (main and tail)
+    if motor == 1 {
+        return (filteredMotorErpm[motor] * erpmToHz1 * SECONDS_PER_MINUTE);    // return filtered tail motor RPM
+    } else {
+        return (filteredMotorErpm[motor] * erpmToHz * SECONDS_PER_MINUTE);     // return filtered main/other motor RPM
+    }
+}
 
 #endif

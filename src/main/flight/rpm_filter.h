@@ -44,3 +44,6 @@ float rpmFilterDterm(int axis, float values);
 void  rpmFilterUpdate();
 bool isRpmFilterEnabled(void);
 float rpmMinMotorFrequency();
+
+// Return motor RPM for HF3D governor or tail motor control
+float rpmGetFilteredMotorRPM(int motor);
