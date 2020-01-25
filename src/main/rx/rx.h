@@ -119,7 +119,7 @@ typedef struct rxChannelRangeConfig_s {
     uint16_t max;
 } rxChannelRangeConfig_t;
 
-PG_DECLARE_ARRAY(rxChannelRangeConfig_t, NON_AUX_CHANNEL_COUNT, rxChannelRangeConfigs);
+PG_DECLARE_ARRAY(rxChannelRangeConfig_t, NON_AUX_CHANNEL_COUNT+1, rxChannelRangeConfigs);    // HF3D:  Updated to allow setting RXRANGE for AUX1 (collective)
 
 struct rxRuntimeState_s;
 typedef uint16_t (*rcReadRawDataFnPtr)(const struct rxRuntimeState_s *rxRuntimeState, uint8_t chan); // used by receiver driver to return channel data

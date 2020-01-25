@@ -40,7 +40,7 @@ typedef enum rc_alias {
     AUX8
 } rc_alias_e;
 
-#define PRIMARY_CHANNEL_COUNT (THROTTLE + 1)
+#define PRIMARY_CHANNEL_COUNT (AUX1 + 1)            // HF3D:  Updated to allow AUX1 channel smoothing
 
 typedef enum {
     THROTTLE_LOW = 0,

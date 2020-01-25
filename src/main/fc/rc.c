@@ -80,6 +80,7 @@ enum {
     PITCH_FLAG = 1 << PITCH,
     YAW_FLAG = 1 << YAW,
     THROTTLE_FLAG = 1 << THROTTLE,
+    COLLECTIVE_FLAG = 1 << AUX1,      // HF3D:  Updated to allow AUX1 channel smoothing
 };
 
 #ifdef USE_RC_SMOOTHING_FILTER
@@ -822,6 +823,7 @@ void initRcProcessing(void)
     switch (rxConfig()->rcInterpolationChannels) {
     case INTERPOLATION_CHANNELS_RPYT:
         interpolationChannels |= THROTTLE_FLAG;
+        interpolationChannels |= COLLECTIVE_FLAG;          // HF3D:  Updated to allow AUX1 channel smoothing
 
         FALLTHROUGH;
     case INTERPOLATION_CHANNELS_RPY:
@@ -838,6 +840,7 @@ void initRcProcessing(void)
         FALLTHROUGH;
     case INTERPOLATION_CHANNELS_T:
         interpolationChannels |= THROTTLE_FLAG;
+        interpolationChannels |= COLLECTIVE_FLAG;         // HF3D:  Updated to allow AUX1 channel smoothing
 
         break;
     }

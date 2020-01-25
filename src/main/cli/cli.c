@@ -1781,7 +1781,7 @@ static void printRxRange(dumpFlags_t dumpMask, const rxChannelRangeConfig_t *cha
 {
     const char *format = "rxrange %u %u %u";
     headingStr = cliPrintSectionHeading(dumpMask, false, headingStr);
-    for (uint32_t i = 0; i < NON_AUX_CHANNEL_COUNT; i++) {
+    for (uint32_t i = 0; i <= NON_AUX_CHANNEL_COUNT; i++) {             // HF3D:  Updated to allow setting RXRANGE for AUX1 (collective)
         bool equalsDefault = false;
         if (defaultChannelRangeConfigs) {
             equalsDefault = !memcmp(&channelRangeConfigs[i], &defaultChannelRangeConfigs[i], sizeof(channelRangeConfigs[i]));
@@ -1813,7 +1813,7 @@ static void cliRxRange(char *cmdline)
     } else {
         ptr = cmdline;
         i = atoi(ptr);
-        if (i >= 0 && i < NON_AUX_CHANNEL_COUNT) {
+        if (i >= 0 && i <= NON_AUX_CHANNEL_COUNT) {                     // HF3D:  Updated to allow setting RXRANGE for AUX1 (collective)
             int rangeMin = PWM_PULSE_MIN, rangeMax = PWM_PULSE_MAX;
 
             ptr = nextArg(ptr);
@@ -1844,7 +1844,7 @@ static void cliRxRange(char *cmdline)
 
             }
         } else {
-            cliShowArgumentRangeError("CHANNEL", 0, NON_AUX_CHANNEL_COUNT - 1);
+            cliShowArgumentRangeError("CHANNEL", 0, NON_AUX_CHANNEL_COUNT);    // HF3D:  Updated to allow setting RXRANGE for AUX1 (collective)
         }
     }
 }

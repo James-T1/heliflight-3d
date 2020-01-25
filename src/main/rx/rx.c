@@ -121,11 +121,12 @@ uint32_t rcInvalidPulsPeriod[MAX_SUPPORTED_RC_CHANNEL_COUNT];
 rxRuntimeState_t rxRuntimeState;
 static uint8_t rcSampleIndex = 0;
 
-PG_REGISTER_ARRAY_WITH_RESET_FN(rxChannelRangeConfig_t, NON_AUX_CHANNEL_COUNT, rxChannelRangeConfigs, PG_RX_CHANNEL_RANGE_CONFIG, 0);
+PG_REGISTER_ARRAY_WITH_RESET_FN(rxChannelRangeConfig_t, NON_AUX_CHANNEL_COUNT+1, rxChannelRangeConfigs, PG_RX_CHANNEL_RANGE_CONFIG, 0);
 void pgResetFn_rxChannelRangeConfigs(rxChannelRangeConfig_t *rxChannelRangeConfigs)
 {
     // set default calibration to full range and 1:1 mapping
-    for (int i = 0; i < NON_AUX_CHANNEL_COUNT; i++) {
+    // HF3D:  Updated to allow setting RXRANGE for AUX1 (collective)
+    for (int i = 0; i <= NON_AUX_CHANNEL_COUNT; i++) {
         rxChannelRangeConfigs[i].min = PWM_RANGE_MIN;
         rxChannelRangeConfigs[i].max = PWM_RANGE_MAX;
     }
@@ -135,7 +136,7 @@ PG_REGISTER_ARRAY_WITH_RESET_FN(rxFailsafeChannelConfig_t, MAX_SUPPORTED_RC_CHAN
 void pgResetFn_rxFailsafeChannelConfigs(rxFailsafeChannelConfig_t *rxFailsafeChannelConfigs)
 {
     for (int i = 0; i < MAX_SUPPORTED_RC_CHANNEL_COUNT; i++) {
-        rxFailsafeChannelConfigs[i].mode = (i < NON_AUX_CHANNEL_COUNT) ? RX_FAILSAFE_MODE_AUTO : RX_FAILSAFE_MODE_HOLD;
+        rxFailsafeChannelConfigs[i].mode = (i < NON_AUX_CHANNEL_COUNT) ? RX_FAILSAFE_MODE_AUTO : RX_FAILSAFE_MODE_HOLD;  // HF3D:  Leave collective AUX1 at Hold
         rxFailsafeChannelConfigs[i].step = (i == THROTTLE)
             ? CHANNEL_VALUE_TO_RXFAIL_STEP(RX_MIN_USEC)
             : CHANNEL_VALUE_TO_RXFAIL_STEP(RX_MID_USEC);
@@ -144,7 +145,8 @@ void pgResetFn_rxFailsafeChannelConfigs(rxFailsafeChannelConfig_t *rxFailsafeCha
 
 void resetAllRxChannelRangeConfigurations(rxChannelRangeConfig_t *rxChannelRangeConfig) {
     // set default calibration to full range and 1:1 mapping
-    for (int i = 0; i < NON_AUX_CHANNEL_COUNT; i++) {
+    // HF3D:  Updated to allow setting RXRANGE for AUX1 (collective)
+    for (int i = 0; i <= NON_AUX_CHANNEL_COUNT; i++) {
         rxChannelRangeConfig->min = PWM_RANGE_MIN;
         rxChannelRangeConfig->max = PWM_RANGE_MAX;
         rxChannelRangeConfig++;
@@ -583,13 +585,16 @@ static void readRxChannelsApplyRanges(void)
 {
     for (int channel = 0; channel < rxChannelCount; channel++) {
 
+        // Internally channels are always referenced in the order of rcChannelLetters[], 
+        //  so we must find the corresponding channel on the RX using rcmap[] and read from that channel.
         const uint8_t rawChannel = channel < RX_MAPPABLE_CHANNEL_COUNT ? rxConfig()->rcmap[channel] : channel;
 
         // sample the channel
         uint16_t sample = rxRuntimeState.rcReadRawFn(&rxRuntimeState, rawChannel);
 
         // apply the rx calibration
-        if (channel < NON_AUX_CHANNEL_COUNT) {
+        // HF3D:  Updated to allow setting RXRANGE for AUX1 (collective)
+        if (channel <= NON_AUX_CHANNEL_COUNT) {
             sample = applyRxChannelRangeConfiguraton(sample, rxChannelRangeConfigs(channel));
         }
 
@@ -618,8 +623,8 @@ static void detectAndApplySignalLossBehaviour(void)
             if (cmp32(currentTimeMs, rcInvalidPulsPeriod[channel]) < 0) {
                 continue;           // skip to next channel to hold channel value MAX_INVALID_PULS_TIME
             } else {
-                sample = getRxfailValue(channel);   // after that apply rxfail value
-                if (channel < NON_AUX_CHANNEL_COUNT) {
+                sample = getRxfailValue(channel);              // after that apply rxfail value
+                if (channel <= NON_AUX_CHANNEL_COUNT) {        // HF3D:  Updated to allow setting RXRANGE for AUX1 (collective)
                     rxFlightChannelsValid = false;
                 }
             }
@@ -679,10 +684,12 @@ bool calculateRxChannelsAndUpdateFailsafe(timeUs_t currentTimeUs)
 
 void parseRcChannels(const char *input, rxConfig_t *rxConfig)
 {
-    for (const char *c = input; *c; c++) {
-        const char *s = strchr(rcChannelLetters, *c);
-        if (s && (s < rcChannelLetters + RX_MAPPABLE_CHANNEL_COUNT)) {
-            rxConfig->rcmap[s - rcChannelLetters] = c - input;
+    // map each letter in AETR1234, TAER1234, etc to the proper internal input order
+    // Internal order is:  rcChannelLetters[] = "AERT12345678abcdefgh";  
+    for (const char *c = input; *c; c++) {   
+        const char *s = strchr(rcChannelLetters, *c);                     // get pointer to the first occurrence of the character c in the rcChannelLetters[] array
+        if (s && (s < rcChannelLetters + RX_MAPPABLE_CHANNEL_COUNT)) {    // check to ensure channel existed in array, and that we have that many channels available on RX
+            rxConfig->rcmap[s - rcChannelLetters] = c - input;            // map input channel to this channel letter position in rcmap
         }
     }
 }
