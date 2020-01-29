@@ -464,11 +464,11 @@ void servoMixer(void)
     // HF3D TODO:  Be very cautious of increasing PID_SERVO_MIXER_SCALING in the future code!!  
     //   ** Users may unexpectedly end up with more cyclic pitch than they originally setup if you change it!
     //   Maybe change the max criteria to something else?  It's actually the physical servo output we want to limit...
-    if (swashRingTotal > (currentPidProfile->pidSumLimit * PID_SERVO_MIXER_SCALING)) {
+/*     if (swashRingTotal > (currentPidProfile->pidSumLimit * PID_SERVO_MIXER_SCALING)) {
         // normalize the roll and pitch values using the maximum if the sum exceeds our max expected value
         input[INPUT_STABILIZED_ROLL] /= swashRingTotal;
         input[INPUT_STABILIZED_PITCH] /= swashRingTotal;
-    }
+    } */
     // NOTE:  pidSumLimit should be increased until exactly 10 degrees of cyclic pitch is achieved at maximum swash deflection and zero collective pitch
     //   It's best to start low with pidSumLimit and then increase it while continuing to measure total pitch.  This avoids damage to servos from binding.
     //   Warning:  More than 10 degrees of available cyclic pitch can lead to boom strikes!!!
