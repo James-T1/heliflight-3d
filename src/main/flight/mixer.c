@@ -690,7 +690,7 @@ static void applyFlipOverAfterCrashModeToMotors(void)
 }
 
 // HF3D TODO:  Move governor logic to separate source file
-static FAST_RAM_ZERO_INIT int spoolLoopCount = 0;
+//static FAST_RAM_ZERO_INIT int spoolLoopCount = 0;
 static FAST_RAM_ZERO_INIT float lastSpoolTarget = 0;
 static FAST_RAM_ZERO_INIT uint8_t spooledUp = 0;
 
@@ -733,9 +733,10 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         } else {
             spooledUp = 1;
         } */
-        } else if (throttle < lastSpoolTarget) {
+        } else if (throttle <= lastSpoolTarget) {
             // If user spools up above 1000rpm, then lowers throttle below the last spool target, allow the heli to be considered spooled up
             spooledUp = 1;
+            lastSpoolTarget = throttle;        // Allow spool target to reduce with throttle freely
         }
         
         // Skip spooling logic if no throttle signal or if we're disarmed
@@ -744,6 +745,16 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
             //   spooledUp flag will reset anyway if RPM < 1000
             lastSpoolTarget = 0.0f;         // Require re-spooling to start from zero if RPM<1000 and throttle=0 or disarmed
         
+        // If not spooled up and throttle is higher than our last spooled-up output
+        } else if (!spooledUp && (lastSpoolTarget < throttle)) {
+            
+            throttle = lastSpoolTarget + 0.000025f;    // 0.001/rampDivider
+            lastSpoolTarget = throttle;
+            
+        }
+        
+/* 
+        // old code:
         // If not spooled up and throttle is higher than our last spooled-up output
         } else if (!spooledUp && (lastSpoolTarget < throttle)) {
                     
@@ -767,7 +778,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
             }
         } else if (lastSpoolTarget > throttle) {
             lastSpoolTarget = throttle;        // Allow spool target to reduce with throttle freely
-        }
+        } */
         
         mainMotorThrottle = throttle;        // Used by the tail code to set the base tail motor output as a fraction of main motor output
         // Original code to scale throttle to motor output range
