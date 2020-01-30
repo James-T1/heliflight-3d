@@ -715,10 +715,11 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         // We're stealing the mmix throttle% section on motor 0 to be our ramp rate instead. 
         // Ramp rate is how many seconds to go from 0rpm to 100% pwm output
         // Calculate number of PID loops per 1/1000th PWM step to achieve the requested ramp rate:
-        // targetPidLooptime is in microseconds...
+        // targetPidLooptime is in units of microseconds...  (8kHz = 125 targetPidLooptime)
         // Throttle = 5% ==> 5 seconds to spool up....
         //   5 seconds = num_loops * 125uS looptime =>  num_loops = 5/.000125 = 40,000 loops for full spool-up from 0% to 100%
         //   Divide 40,000 loops by 1000 PWM steps ==>  Allow 1 step for every 40 pid loop executions  (5ms per step)
+        // activemixer.throttle = floating point value 0-100
         float rampTime = activeMixer[0].throttle;       // HF3D TODO:  Move configuration value for throttle ramp rate off mmix.throttle to a new configuration parameter
         uint16_t rampDivider = rampTime*1e6f / (targetPidLooptime*1000);      // Move to init
         
@@ -732,7 +733,11 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         float mainMotorRPM = rpmGetFilteredMotorRPM(0);    // Get main motor rpm  --- what about calcESCrpm if DSHOT not available, but normal ESC telemetry is?
         if (mainMotorRPM < 1000.0f) {
             spooledUp = 0;
-        } else if (throttle < lastSpoolTarget) {
+        // added for testing
+        } else {
+            spooledUp = 1;
+        }
+/*         } else if (throttle < lastSpoolTarget) {
             // If user spools up above 1000rpm, then lowers throttle below the last spool target, allow the heli to be considered spooled up
             spooledUp = 1;
         }
@@ -768,7 +773,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
             lastSpoolTarget = throttle;        // Allow spool target to reduce with throttle freely
         }
         
-        mainMotorThrottle = throttle;        // Used by the tail code to set the base tail motor output as a fraction of main motor output
+        mainMotorThrottle = throttle;        // Used by the tail code to set the base tail motor output as a fraction of main motor output */
         // Original code to scale throttle to motor output range
         float motorOutput = motorOutputMin + motorOutputRange * throttle;
         if (failsafeIsActive()) {
