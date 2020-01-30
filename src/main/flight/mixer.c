@@ -720,7 +720,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         //   5 seconds = num_loops * 125uS looptime =>  num_loops = 5/.000125 = 40,000 loops for full spool-up from 0% to 100%
         //   Divide 40,000 loops by 1000 PWM steps ==>  Allow 1 step for every 40 pid loop executions  (5ms per step)
         float rampTime = activeMixer[0].throttle;       // HF3D TODO:  Move configuration value for throttle ramp rate off mmix.throttle to a new configuration parameter
-        uint16_t rampDivider = (uint16_t)(rampTime / (targetPidLooptime*1000));      // Move to init
+        uint16_t rampDivider = rampTime*1e6f / (targetPidLooptime*1000);      // Move to init
         
         // HF3D TODO:  Call governor code with the desired throttle setting for the main motor
         //   Determine if it should be called before or after spool-up code...
