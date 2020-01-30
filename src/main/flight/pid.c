@@ -748,15 +748,6 @@ void pidAcroTrainerInit(void)
 #endif // USE_ACRO_TRAINER
 
 #ifdef USE_THRUST_LINEARIZATION
-float pidCompensateThrustLinearization(float throttle)
-{
-    // HF3D:  Don't manipulate throttle signal.  We're going to use thrust linearization for tail motor output though.
-    // if (thrustLinearization != 0.0f) {
-        // throttle = throttle * (throttle * thrustLinearization + 1.0f - thrustLinearization);
-    // }
-    return throttle;
-}
-
 float pidApplyThrustLinearization(float motorOutput)
 {
     if (thrustLinearization != 0.0f) {
@@ -1353,10 +1344,10 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
     DEBUG_SET(DEBUG_ANTI_GRAVITY, 0, lrintf(itermAccelerator * 1000));
 
     // gradually scale back integration when above windup point
-    float dynCi = dT * itermAccelerator;
-    if (itermWindupPointInv > 1.0f) {
-        dynCi *= constrainf((1.0f - getMotorMixRange()) * itermWindupPointInv, 0.0f, 1.0f);
-    }
+    float dynCi = dT * itermAccelerator;                   // itermAccelerator = 1.0f when antigravity disabled
+    // if (itermWindupPointInv > 1.0f) {                      // disabled if iterm_windup = 100, so dynCi = dT
+        // dynCi *= constrainf((1.0f - getMotorMixRange()) * itermWindupPointInv, 0.0f, 1.0f);
+    // }
 
     // Precalculate gyro data for D-term here, this allows loop unrolling
     float gyroRateDterm[XYZ_AXIS_COUNT];
@@ -1457,6 +1448,7 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
 
         // -----calculate I component
         const float Ki = pidCoefficient[axis].Ki;
+        // dynCi = dT if airmode disabled and iterm_windup = 100
         pidData[axis].I = constrainf(previousIterm + Ki * itermErrorRate * dynCi, -itermLimit, itermLimit);
 
         // -----calculate pidSetpointDelta

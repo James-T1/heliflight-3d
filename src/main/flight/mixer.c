@@ -92,12 +92,6 @@ static motorMixer_t currentMixer[MAX_SUPPORTED_MOTORS];
 
 static FAST_RAM_ZERO_INIT int throttleAngleCorrection;
 
-// HF3D TODO:  Move governor logic to separate source file
-static FAST_RAM_ZERO_INIT int spoolLoopCount;
-static FAST_RAM_ZERO_INIT float lastSpoolTarget;
-static FAST_RAM_ZERO_INIT uint8_t spooledUp;
-
-
 // HF3D TODO:  Remove all the useless mixers and replace them with CCPM mixes for helicopters
 //     May require updating configurator?
 static const motorMixer_t mixerQuadX[] = {
@@ -309,7 +303,8 @@ uint8_t getMotorCount(void)
 
 float getMotorMixRange(void)
 {
-    return motorMixRange;
+    //return motorMixRange;     // HF3D TODO:  Remove motorMixRange completely
+    return 0.0f;
 }
 
 bool areMotorsRunning(void)
@@ -349,10 +344,6 @@ void initEscEndpoints(void)
     motorInitEndpoints(motorOutputLimit, &motorOutputLow, &motorOutputHigh, &disarmMotorOutput, &deadbandMotor3dHigh, &deadbandMotor3dLow);
 
     rcCommandThrottleRange = PWM_RANGE_MAX - PWM_RANGE_MIN;
-    
-    spoolLoopCount = 0;       // HF3D TODO:  Move to a separate governor source file
-    lastSpoolTarget = 0.0f;
-    spooledUp = 0;
 }
 
 void mixerInit(mixerMode_e mixerMode)
@@ -698,6 +689,11 @@ static void applyFlipOverAfterCrashModeToMotors(void)
     }
 }
 
+// HF3D TODO:  Move governor logic to separate source file
+static FAST_RAM_ZERO_INIT int spoolLoopCount = 0;
+static FAST_RAM_ZERO_INIT float lastSpoolTarget = 0;
+static FAST_RAM_ZERO_INIT uint8_t spooledUp = 0;
+
 static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t *activeMixer)
 {
     // HF3D: Re-wrote this section for main and optional tail motor use.  No longer valid for multirotors.
@@ -721,7 +717,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         //   Divide 40,000 loops by 1000 PWM steps ==>  Allow 1 step for every 40 pid loop executions  (5ms per step)
         // activemixer.throttle = floating point value 0-100
         float rampTime = activeMixer[0].throttle;       // HF3D TODO:  Move configuration value for throttle ramp rate off mmix.throttle to a new configuration parameter
-        uint16_t rampDivider = rampTime*1e6f / (targetPidLooptime*1000);      // Move to init
+        int rampDivider = rampTime*1e6f / (targetPidLooptime*1000);      // Move to init
         
         // HF3D TODO:  Call governor code with the desired throttle setting for the main motor
         //   Determine if it should be called before or after spool-up code...
@@ -733,11 +729,11 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         float mainMotorRPM = rpmGetFilteredMotorRPM(0);    // Get main motor rpm  --- what about calcESCrpm if DSHOT not available, but normal ESC telemetry is?
         if (mainMotorRPM < 1000.0f) {
             spooledUp = 0;
-        // added for testing
+/*         // added for testing
         } else {
             spooledUp = 1;
-        }
-/*         } else if (throttle < lastSpoolTarget) {
+        } */
+        } else if (throttle < lastSpoolTarget) {
             // If user spools up above 1000rpm, then lowers throttle below the last spool target, allow the heli to be considered spooled up
             spooledUp = 1;
         }
@@ -757,7 +753,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
                 throttle = lastSpoolTarget;    // Prevent throttle from increasing by setting it back to the previous throttle setting allowed by spool-up
             } else {
                 // Allow spooling to continue on this ramp step
-                spoolLoopCount = 0;         // Reset our counter to restart the spool-up
+                spoolLoopCount = 0;         // Reset our counter to allow for a pause on the next few passes through
 
                 // Only allow throttle to ramp up a little bit
                 if ((lastSpoolTarget + 0.001f) < throttle) {
@@ -773,7 +769,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
             lastSpoolTarget = throttle;        // Allow spool target to reduce with throttle freely
         }
         
-        mainMotorThrottle = throttle;        // Used by the tail code to set the base tail motor output as a fraction of main motor output */
+        mainMotorThrottle = throttle;        // Used by the tail code to set the base tail motor output as a fraction of main motor output
         // Original code to scale throttle to motor output range
         float motorOutput = motorOutputMin + motorOutputRange * throttle;
         if (failsafeIsActive()) {
@@ -991,7 +987,6 @@ FAST_CODE_NOINLINE void mixTable(timeUs_t currentTimeUs, uint8_t vbatPidCompensa
 
     // Find roll/pitch/yaw desired output
     float motorMix[MAX_SUPPORTED_MOTORS];
-    float motorMixMax = 0, motorMixMin = 0;
     for (int i = 0; i < motorCount; i++) {
 
         float mix =
@@ -1003,11 +998,6 @@ FAST_CODE_NOINLINE void mixTable(timeUs_t currentTimeUs, uint8_t vbatPidCompensa
         //   Other option is to use a governor to drive the tail motor to an exact RPM target instead of using a throttle setpoint
         mix *= vbatCompensationFactor;  // Add voltage compensation
 
-        if (mix > motorMixMax) {
-            motorMixMax = mix;
-        } else if (mix < motorMixMin) {
-            motorMixMin = mix;
-        }
         motorMix[i] = mix;
     }
 
@@ -1015,11 +1005,6 @@ FAST_CODE_NOINLINE void mixTable(timeUs_t currentTimeUs, uint8_t vbatPidCompensa
 
 #ifdef USE_DYN_LPF
     updateDynLpfCutoffs(currentTimeUs, throttle);
-#endif
-
-#ifdef USE_THRUST_LINEARIZATION
-    // reestablish old throttle stick feel by counter compensating thrust linearization
-    throttle = pidCompensateThrustLinearization(throttle);
 #endif
 
 #if defined(USE_THROTTLE_BOOST)
@@ -1037,34 +1022,7 @@ FAST_CODE_NOINLINE void mixTable(timeUs_t currentTimeUs, uint8_t vbatPidCompensa
     }
 #endif
 
-#ifdef USE_AIRMODE_LPF
-    const float unadjustedThrottle = throttle;
-    throttle += pidGetAirmodeThrottleOffset();
-    float airmodeThrottleChange = 0;
-#endif
     mixerThrottle = throttle;
-
-    motorMixRange = motorMixMax - motorMixMin;
-    if (motorMixRange > 1.0f) {
-        for (int i = 0; i < motorCount; i++) {
-            motorMix[i] /= motorMixRange;
-        }
-        // Get the maximum correction by setting offset to center when airmode enabled
-        if (airmodeEnabled) {
-            throttle = 0.5f;
-        }
-    } else {
-        if (airmodeEnabled || throttle > 0.5f) {  // Only automatically adjust throttle when airmode enabled. Airmode logic is always active on high throttle
-            throttle = constrainf(throttle, -motorMixMin, 1.0f - motorMixMax);
-#ifdef USE_AIRMODE_LPF
-            airmodeThrottleChange = constrainf(unadjustedThrottle, -motorMixMin, 1.0f - motorMixMax) - unadjustedThrottle;
-#endif
-        }
-    }
-
-#ifdef USE_AIRMODE_LPF
-    pidUpdateAirmodeLpf(airmodeThrottleChange);
-#endif
 
     if (featureIsEnabled(FEATURE_MOTOR_STOP)
         && ARMING_FLAG(ARMED)

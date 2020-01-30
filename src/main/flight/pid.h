@@ -233,7 +233,6 @@ void pidSetAntiGravityState(bool newState);
 bool pidAntiGravityEnabled(void);
 #ifdef USE_THRUST_LINEARIZATION
 float pidApplyThrustLinearization(float motorValue);
-float pidCompensateThrustLinearization(float throttle);
 #endif
 #ifdef USE_AIRMODE_LPF
 void pidUpdateAirmodeLpf(float currentOffset);
