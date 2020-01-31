@@ -82,7 +82,6 @@ PG_REGISTER_ARRAY(motorMixer_t, MAX_SUPPORTED_MOTORS, customMotorMixer, PG_MOTOR
 #define PWM_RANGE_MID 1500
 
 static FAST_RAM_ZERO_INIT uint8_t motorCount;
-static FAST_RAM_ZERO_INIT float motorMixRange;
 
 float FAST_RAM_ZERO_INIT motor[MAX_SUPPORTED_MOTORS];
 float motor_disarmed[MAX_SUPPORTED_MOTORS];
@@ -404,7 +403,8 @@ void mixerConfigureOutput(void)
     // targetPidLooptime is in units of microseconds...  (8kHz => targetPidLooptime = 125)
     //   5 seconds = @ 8kHz ==> 40,000 loops for full spool-up from 0% to 100%
     // HF3D TODO:  Move configuration value for throttle ramp rate off mmix.throttle to a new configuration parameter
-    rampRate = targetPidLooptime / (currentMixer[0].throttle * 1e6);    
+    //rampRate = targetPidLooptime / (currentMixer[0].throttle * 1e6f);    
+    rampRate = 0.000025f;
 }
 
 void mixerLoadMix(int index, motorMixer_t *customMixers)
