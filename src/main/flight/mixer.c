@@ -404,7 +404,7 @@ void mixerConfigureOutput(void)
     // targetPidLooptime is in units of microseconds...  (8kHz => targetPidLooptime = 125)
     //   5 seconds = @ 8kHz ==> 40,000 loops for full spool-up from 0% to 100%
     // HF3D TODO:  Move configuration value for throttle ramp rate off mmix.throttle to a new configuration parameter
-    rampRate = targetPidLooptime / (activeMixer[0].throttle * 1e6);    
+    rampRate = targetPidLooptime / (currentMixer[0].throttle * 1e6);    
 }
 
 void mixerLoadMix(int index, motorMixer_t *customMixers)
