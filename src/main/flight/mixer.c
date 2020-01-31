@@ -364,8 +364,10 @@ void mixerInit(mixerMode_e mixerMode)
 #endif
 }
 
-#ifndef USE_QUAD_MIXER_ONLY
+static FAST_RAM_ZERO_INIT float rampRate = 0.0002f;          // Used for spool-up logic.  Default is 5 seconds at 1kHz.
 
+#ifndef USE_QUAD_MIXER_ONLY
+// called from init at FC startup.
 void mixerConfigureOutput(void)
 {
     motorCount = 0;
@@ -393,6 +395,16 @@ void mixerConfigureOutput(void)
         }
     }
     mixerResetDisarmedMotors();
+    
+    // Determine rampRate that will increase throttle on each loop to go from 0% throttle to 100% throttle in rampTime seconds
+    // We're stealing the mmix throttle% section on motor 0 to be our ramp-up time instead. 
+    // rampTime is how many seconds to go from 0rpm to 100% pwm output
+    // mmix 1 throttle = 5.0 ==> 5 seconds to spool up from 0% to 100% throttle
+    //   activemixer.throttle = floating point value between 0-100
+    // targetPidLooptime is in units of microseconds...  (8kHz => targetPidLooptime = 125)
+    //   5 seconds = @ 8kHz ==> 40,000 loops for full spool-up from 0% to 100%
+    // HF3D TODO:  Move configuration value for throttle ramp rate off mmix.throttle to a new configuration parameter
+    rampRate = targetPidLooptime / (activeMixer[0].throttle * 1e6);    
 }
 
 void mixerLoadMix(int index, motorMixer_t *customMixers)
@@ -690,9 +702,9 @@ static void applyFlipOverAfterCrashModeToMotors(void)
 }
 
 // HF3D TODO:  Move governor logic to separate source file
-//static FAST_RAM_ZERO_INIT int spoolLoopCount = 0;
 static FAST_RAM_ZERO_INIT float lastSpoolTarget = 0;
 static FAST_RAM_ZERO_INIT uint8_t spooledUp = 0;
+// rampRate declared and assigned up above in mixerConfigureOutput
 
 static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t *activeMixer)
 {
@@ -708,16 +720,6 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
     
     // Handle MAIN motor (motor[0]) throttle output & spool-up
     if (motorCount > 0) {
-        // We're stealing the mmix throttle% section on motor 0 to be our ramp rate instead. 
-        // Ramp rate is how many seconds to go from 0rpm to 100% pwm output
-        // Calculate number of PID loops per 1/1000th PWM step to achieve the requested ramp rate:
-        // targetPidLooptime is in units of microseconds...  (8kHz = 125 targetPidLooptime)
-        // Throttle = 5% ==> 5 seconds to spool up....
-        //   5 seconds = num_loops * 125uS looptime =>  num_loops = 5/.000125 = 40,000 loops for full spool-up from 0% to 100%
-        //   Divide 40,000 loops by 1000 PWM steps ==>  Allow 1 step for every 40 pid loop executions  (5ms per step)
-        // activemixer.throttle = floating point value 0-100
-        float rampTime = activeMixer[0].throttle;       // HF3D TODO:  Move configuration value for throttle ramp rate off mmix.throttle to a new configuration parameter
-        int rampDivider = rampTime*1e6f / (targetPidLooptime*1000);      // Move to init
         
         // HF3D TODO:  Call governor code with the desired throttle setting for the main motor
         //   Determine if it should be called before or after spool-up code...
@@ -729,10 +731,6 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         float mainMotorRPM = rpmGetFilteredMotorRPM(0);    // Get main motor rpm  --- what about calcESCrpm if DSHOT not available, but normal ESC telemetry is?
         if (mainMotorRPM < 1000.0f) {
             spooledUp = 0;
-/*         // added for testing
-        } else {
-            spooledUp = 1;
-        } */
         } else if (throttle <= lastSpoolTarget) {
             // If user spools up above 1000rpm, then lowers throttle below the last spool target, allow the heli to be considered spooled up
             spooledUp = 1;
@@ -745,40 +743,13 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
             //   spooledUp flag will reset anyway if RPM < 1000
             lastSpoolTarget = 0.0f;         // Require re-spooling to start from zero if RPM<1000 and throttle=0 or disarmed
         
-        // If not spooled up and throttle is higher than our last spooled-up output
+        // If not spooled up and throttle is higher than our last spooled-up output, spool some more
         } else if (!spooledUp && (lastSpoolTarget < throttle)) {
             
-            throttle = lastSpoolTarget + 0.000025f;    // 0.001/rampDivider
+            throttle = lastSpoolTarget + rampRate;    // rampRate defined in mixerConfigureOutput up above
             lastSpoolTarget = throttle;
             
         }
-        
-/* 
-        // old code:
-        // If not spooled up and throttle is higher than our last spooled-up output
-        } else if (!spooledUp && (lastSpoolTarget < throttle)) {
-                    
-            // Only spool up every rampDivider times through the PID loop
-            if (spoolLoopCount != rampDivider) {
-                spoolLoopCount++;           // Increment our counter if it's not up to the rampDivider value
-                throttle = lastSpoolTarget;    // Prevent throttle from increasing by setting it back to the previous throttle setting allowed by spool-up
-            } else {
-                // Allow spooling to continue on this ramp step
-                spoolLoopCount = 0;         // Reset our counter to allow for a pause on the next few passes through
-
-                // Only allow throttle to ramp up a little bit
-                if ((lastSpoolTarget + 0.001f) < throttle) {
-                    throttle = lastSpoolTarget + 0.001f;
-                } else {
-                    // Let throttle fall through unchanged and set spooledUp flag
-                    spooledUp = 1;
-                }
-                
-                lastSpoolTarget = throttle;    // Store the throttle value for use in the next loop
-            }
-        } else if (lastSpoolTarget > throttle) {
-            lastSpoolTarget = throttle;        // Allow spool target to reduce with throttle freely
-        } */
         
         mainMotorThrottle = throttle;        // Used by the tail code to set the base tail motor output as a fraction of main motor output
         // Original code to scale throttle to motor output range
@@ -852,47 +823,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         motor[i] = disarmMotorOutput;
     }
 
-/*     // Now add in the desired throttle, but keep in a range that doesn't clip adjusted
-    // roll/pitch/yaw. This could move throttle down, but also up for those low throttle flips.
-    for (int i = 0; i < motorCount; i++) {
-        // HF3D:  Motor mix setup for code as it sits now:
-        //   Main motor = motor[0]:
-        //      activeMixer[0].throttle = 1.0       (Throttle channel applied 100% to main motor)
-        //      motorMix[0] = 0.0                   (Yaw/pitch/roll contribution terms = 0)
-        //   Tail motor = motor[1]:
-        //      activeMixer[1].throttle = 0.0       (No throttle applied to tail motor)
-        //      motorMix[1] = constrainf(pidData[FD_YAW].Sum, -yawPidSumLimit, yawPidSumLimit) / PID_MIXER_SCALING;
-        //        (100% of yaw term to the tail motor is how we identify the tail motor)
-        //        PID_MIXER_SCALING = 1000.0f to get pidSum to have similar impact as the -500 to +500 range of the servos?
-        float motorOutput = motorOutputMixSign * motorMix[i] + throttle * activeMixer[i].throttle;
-
-#ifdef USE_THRUST_LINEARIZATION
-        // Scale PID sums and throttle to linearize the system (thrust varies with rpm^2)
-        // https://github.com/betaflight/betaflight/pull/7304
-        motorOutput = pidApplyThrustLinearization(motorOutput);
-#endif
-
-        motorOutput = motorOutputMin + motorOutputRange * motorOutput;
-
-#ifdef USE_SERVOS
-        if (mixerIsTricopter()) {
-            motorOutput += mixerTricopterMotorCorrection(i);
-        }
-#endif
-        if (failsafeIsActive()) {
-#ifdef USE_DSHOT
-            if (isMotorProtocolDshot()) {
-                motorOutput = (motorOutput < motorRangeMin) ? disarmMotorOutput : motorOutput; // Prevent getting into special reserved range
-            }
-#endif
-            motorOutput = constrain(motorOutput, disarmMotorOutput, motorRangeMax);
-        } else {
-            motorOutput = constrain(motorOutput, motorRangeMin, motorRangeMax);
-        }
-        motor[i] = motorOutput;
-    } */
-
-    // Disarmed mode
+    // Disarmed mode check
     if (!ARMING_FLAG(ARMED)) {
         for (int i = 0; i < motorCount; i++) {
             motor[i] = motor_disarmed[i];
