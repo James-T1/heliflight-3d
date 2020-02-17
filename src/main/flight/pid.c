@@ -63,8 +63,8 @@
 #include "pid.h"
 
 // HF3D:  Inits for PID Delay Compensation
-// Delay length = 8000Hz * 50ms = 400 loop times
-#define DELAYLENGTH  400            
+// Delay length = 8000Hz * 35ms = 280 loop times
+#define DELAYLENGTH  280            
 FAST_RAM_ZERO_INIT int delayArrayPos = 0;
 int16_t delayArrayRoll[DELAYLENGTH] = {0};
 int16_t delayArrayPitch[DELAYLENGTH] = {0};
@@ -749,8 +749,8 @@ void pidInit(const pidProfile_t *pidProfile)
 #endif
 
     // HF3D:  Setup our PID Delay Compensation Alpha multiplier with a maximum of 0.10 and a minimum of 0.001
-    //  400 samples ==> 0.0025 would give the average of the last 400 samples of control output subtracted off
-    //  2.5x average is where you probably want to be... around 0.006, or a setting of 6.
+    //  280 samples ==> 0.0036 would give the average of the last 280 samples of control output = subtracted off the output
+    //  2.5x average is where you probably want to be... around 0.009, or a setting of 9
     // Uses crashflip_motor_percent for the setting since we have no use for that in a heli.
     delayCompAlpha = mixerConfig()->crashflip_motor_percent / 1000.0f;
 }
