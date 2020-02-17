@@ -62,6 +62,16 @@
 
 #include "pid.h"
 
+// HF3D:  Inits for PID Delay Compensation
+// Delay length = 8000Hz * 50ms = 400 loop times
+#define DELAYLENGTH  400            
+FAST_RAM_ZERO_INIT int delayArrayPos = 0;
+int16_t delayArrayRoll[DELAYLENGTH] = {0};
+int16_t delayArrayPitch[DELAYLENGTH] = {0};
+FAST_RAM_ZERO_INIT float delayCompSum[3] = {0.0f};
+FAST_RAM_ZERO_INIT float delayCompAlpha = 0.0f;
+// End inits for PID Delay Compensation
+
 const char pidNames[] =
     "ROLL;"
     "PITCH;"
@@ -737,6 +747,12 @@ void pidInit(const pidProfile_t *pidProfile)
 #ifdef USE_RPM_FILTER
     rpmFilterInit(rpmFilterConfig());
 #endif
+
+    // HF3D:  Setup our PID Delay Compensation Alpha multiplier with a maximum of 0.10 and a minimum of 0.001
+    //  400 samples ==> 0.0025 would give the average of the last 400 samples of control output subtracted off
+    //  2.5x average is where you probably want to be... around 0.006, or a setting of 6.
+    // Uses crashflip_motor_percent for the setting since we have no use for that in a heli.
+    delayCompAlpha = mixerConfig()->crashflip_motor_percent / 1000.0f;
 }
 
 #ifdef USE_ACRO_TRAINER
@@ -1560,6 +1576,28 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
         }
     }
 
+    // HF3D:  PID Delay Compensation
+    //  Allows for higher PID gains since the previous control actions the helicopter hasn't responded to yet are taken into account in the PID controller output
+    // Update the PID sums by subtracting the previous unresponded control inputs from the current PID controller outputs
+    pidData[FD_ROLL].Sum -= delayCompAlpha * delayCompSum[FD_ROLL];
+    pidData[FD_PITCH].Sum -= delayCompAlpha * delayCompSum[FD_PITCH];
+    
+    // Update the delay array values & sums
+    // Subtract the oldest value from the array since it will have caused a response by now
+    delayCompSum[FD_ROLL] -= delayArrayRoll[delayArrayPos];
+    delayCompSum[FD_PITCH] -= delayArrayPitch[delayArrayPos];
+    // Replace the oldest value with the newest value
+    delayArrayRoll[delayArrayPos] = (int16_t) constrainf(pidData[FD_ROLL].Sum, -currentPidProfile->pidSumLimit, currentPidProfile->pidSumLimit);
+    delayArrayPitch[delayArrayPos] = (int16_t) constrainf(pidData[FD_PITCH].Sum, -currentPidProfile->pidSumLimit, currentPidProfile->pidSumLimit);
+    // Add the newest outputs to the sums
+    delayCompSum[FD_ROLL] += delayArrayRoll[delayArrayPos];
+    delayCompSum[FD_PITCH] += delayArrayPitch[delayArrayPos];
+    // Increment the delay array position pointer
+    delayArrayPos++;
+    if (delayArrayPos >= DELAYLENGTH) {
+        delayArrayPos = 0;    // Reset pointer into array to the beginning
+    }
+
     // Disable PID control if at zero throttle or if gyro overflow detected
     // This may look very innefficient, but it is done on purpose to always show real CPU usage as in flight
     if (!pidStabilisationEnabled || gyroOverflowDetected()) {
@@ -1571,9 +1609,12 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
 
             pidData[axis].Sum = 0;
         }
+        delayCompSum[FD_ROLL] = 0;
+        delayCompSum[FD_PITCH] = 0;
     } else if (zeroThrottleItermReset) {
         pidResetIterm();
     }
+    
 }
 
 bool crashRecoveryModeActive(void)

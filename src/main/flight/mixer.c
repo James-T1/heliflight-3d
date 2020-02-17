@@ -404,7 +404,11 @@ void mixerConfigureOutput(void)
     //   5 seconds = @ 8kHz ==> 40,000 loops for full spool-up from 0% to 100%
     // HF3D TODO:  Move configuration value for throttle ramp rate off mmix.throttle to a new configuration parameter
     //rampRate = targetPidLooptime / (currentMixer[0].throttle * 1e6f);    
-    rampRate = 0.000025f;
+    rampRate = 0.000025f;    // HF3D TODO:  Figure out why the line of code above doesn't work.
+        // targetPidLooptime should be (uint32_t) 125
+        // currentMixer[0].throttle should be  (float) 5.0
+        // 1e6f should be 1000000
+        // SO WHY DOESN'T IT WORK?????  Result should be 0.000025f, but instead the stupid heli just won't spool up.
 }
 
 void mixerLoadMix(int index, motorMixer_t *customMixers)
