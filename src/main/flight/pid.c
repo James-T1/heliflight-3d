@@ -1587,8 +1587,8 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
     delayCompSum[FD_ROLL] -= delayArrayRoll[delayArrayPos];
     delayCompSum[FD_PITCH] -= delayArrayPitch[delayArrayPos];
     // Replace the oldest value with the newest value
-    delayArrayRoll[delayArrayPos] = (int16_t) constrainf(pidData[FD_ROLL].Sum, -currentPidProfile->pidSumLimit, currentPidProfile->pidSumLimit);
-    delayArrayPitch[delayArrayPos] = (int16_t) constrainf(pidData[FD_PITCH].Sum, -currentPidProfile->pidSumLimit, currentPidProfile->pidSumLimit);
+    delayArrayRoll[delayArrayPos] = (int16_t) constrainf(pidData[FD_ROLL].Sum, -pidProfile->pidSumLimit, pidProfile->pidSumLimit);
+    delayArrayPitch[delayArrayPos] = (int16_t) constrainf(pidData[FD_PITCH].Sum, -pidProfile->pidSumLimit, pidProfile->pidSumLimit);
     // Add the newest outputs to the sums
     delayCompSum[FD_ROLL] += delayArrayRoll[delayArrayPos];
     delayCompSum[FD_PITCH] += delayArrayPitch[delayArrayPos];
