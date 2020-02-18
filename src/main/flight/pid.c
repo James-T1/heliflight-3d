@@ -1535,11 +1535,19 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
 #endif
 
         // Only enable feedforward for rate mode (flightModeFlag=0 is acro/rate mode)
+        //  HF3D TODO:  May need to change this so horizon & angle modes have feedforward also?
         const float feedforwardGain = (flightModeFlags) ? 0.0f : pidCoefficient[axis].Kf;
         if (feedforwardGain > 0) {
             // transition = 1 if feedForwardTransition == 0   (no transition)
             float transition = feedForwardTransition > 0 ? MIN(1.f, getRcDeflectionAbs(axis) * feedForwardTransition) : 1;
-            float feedForward = feedforwardGain * transition * pidSetpointDelta * pidFrequency;
+            // HF3D:  Direct stick feedforward for roll and pitch.  Stick delta feedforward for yaw.
+            if (axis == FD_YAW) {
+                float feedForward = feedforwardGain * transition * pidSetpointDelta * pidFrequency;    //  Kf * 1 * 20 deg/s * 8000
+            } else {
+                // Let's do direct stick feedforward for roll & pitch, and let's AMP IT UP A LOT.
+                // 0.013754 * 90 * 1 * 60 deg/s = 74 output for 100 feedForward gain
+                float feedForward = feedforwardGain * 90.0f * transition * currentPidSetpoint;
+            }
 
 #ifdef USE_INTERPOLATED_SP
             pidData[axis].F = shouldApplyFfLimits(axis) ?
