@@ -1145,6 +1145,7 @@ STATIC_UNIT_TESTED void applyAbsoluteControl(const int axis, const float gyroRat
         
         // Create window around the low-pass filtered signal value
         //   No change in stick position ==> Lpf = commanded rate, Hpf = 0
+        //      So, no stick movement = no window.  The window collapses to just the commanded rate on that axis.
         //   Fast stick movement ==>  Lpf = smoothed command rate, 1>Hpf>0
         // Note:  Commanded rate could also be a result of self-leveling or other modes
         const float gmaxac = setpointLpf + 2 * setpointHpf;
@@ -1164,19 +1165,19 @@ STATIC_UNIT_TESTED void applyAbsoluteControl(const int axis, const float gyroRat
                 acErrorRate = -axisError[axis] * pidFrequency;
             }
         } else {
-            // Roll rate sensed by gyro was outside of the window.  
-            // Limit the absolute control error rate to the maximum or minimum edges of the window and subtract the actual gyro rate
-            // This prevents excessive absolute control error from accumulating
+            // Roll rate sensed by gyro was outside of the window
+            // Set the absolute control error rate to the maximum or minimum edges of the window and subtract the actual gyro rate
+            // If no change in stick position, then this will simply be rcCommandRate - gyroRate   (so just the angle rate error)
             acErrorRate = (gyroRate > gmaxac ? gmaxac : gminac ) - gyroRate;
         }
 
         // Check to ensure we are spooled up at a reasonable level
         if (isAirmodeActivated()) {
-            // Sum the previously accumulated rate error with the new rate error times the timestep
-            //  Limit the total error to the range defined by pidProfile->abs_control_error_limit
+            // Integrate the angle rate error, which gives us the accumulated angle error for this axis
+            //  Limit the total angle error to the range defined by pidProfile->abs_control_error_limit
             axisError[axis] = constrainf(axisError[axis] + acErrorRate * dT,
                 -acErrorLimit, acErrorLimit);
-            // Apply the gain defined in pidProfile->abs_control_gain to get the desired correction amount
+            // Apply a proportional gain (abs_control_gain) to get a desired amount of correction
             //  Limit the total correction to the range defined by pidProfile->abs_control_limit
             const float acCorrection = constrainf(axisError[axis] * acGain, -acLimit, acLimit);
             // Manipulate the commanded roll rate on this axis by adding in the absolute control correction

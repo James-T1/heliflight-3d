@@ -766,7 +766,16 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
 #endif
             motorOutput = constrain(motorOutput, disarmMotorOutput, motorRangeMax);
         } else {
+            // HF3D:  Prevent main motor from running or twitching when dshot_idle_value is used.
+#ifdef USE_DSHOT
+            if (isMotorProtocolDshot()) {
+                // Use DSHOT_MIN_THROTTLE to allow the main motor to come to a complete stop at any time
+                //   Also prevents the main motor from "twitching" if the dshot_idle_value is setup to prevent the tail motor from stopping
+                motorOutput = constrain(motorOutput, DSHOT_MIN_THROTTLE, motorRangeMax);
+            }
+#else
             motorOutput = constrain(motorOutput, motorRangeMin, motorRangeMax);
+#endif
         }
         motor[0] = motorOutput;
         
@@ -816,7 +825,21 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
 #endif
             motorOutput = constrain(motorOutput, disarmMotorOutput, motorRangeMax);
         } else {
+            // HF3D:  Only use dshot_idle_value when main motor is spinning.
+#ifdef USE_DSHOT
+            if (isMotorProtocolDshot()) {
+                if (mainMotorThrottle > 0.0) {
+                    // Use dshot_idle_value to prevent tail from stopping when main motor is running
+                    // motorRangeMin = DSHOT_MIN_THROTTLE + ((DSHOT_MAX_THROTTLE - DSHOT_MIN_THROTTLE) / 100.0f) * CONVERT_PARAMETER_TO_PERCENT(motorConfig()->digitalIdleOffsetValue);
+                    motorOutput = constrain(motorOutput, motorRangeMin, motorRangeMax);
+                } else {
+                    // Use DSHOT_MIN_THROTTLE to allow the tail to come to a complete stop when main motor isn't running
+                    motorOutput = constrain(motorOutput, DSHOT_MIN_THROTTLE, motorRangeMax);
+                }
+            }
+#else
             motorOutput = constrain(motorOutput, motorRangeMin, motorRangeMax);
+#endif
         }
         motor[1] = motorOutput;     // Set final tail motor output
 
