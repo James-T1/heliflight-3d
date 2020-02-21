@@ -342,16 +342,17 @@ static void validateAndFixConfig(void)
         }
     }
 
-#if defined(USE_THROTTLE_BOOST)
-    if (!rcSmoothingIsEnabled() ||
-        !(rxConfig()->rcInterpolationChannels == INTERPOLATION_CHANNELS_RPYT
-        || rxConfig()->rcInterpolationChannels == INTERPOLATION_CHANNELS_T
-        || rxConfig()->rcInterpolationChannels == INTERPOLATION_CHANNELS_RPT)) {
-        for (unsigned i = 0; i < PID_PROFILE_COUNT; i++) {
-            pidProfilesMutable(i)->throttle_boost = 0;
-        }
-    }
-#endif
+// HF3D:  Repurposing throttle boost setting
+// #if defined(USE_THROTTLE_BOOST)
+    // if (!rcSmoothingIsEnabled() ||
+        // !(rxConfig()->rcInterpolationChannels == INTERPOLATION_CHANNELS_RPYT
+        // || rxConfig()->rcInterpolationChannels == INTERPOLATION_CHANNELS_T
+        // || rxConfig()->rcInterpolationChannels == INTERPOLATION_CHANNELS_RPT)) {
+        // for (unsigned i = 0; i < PID_PROFILE_COUNT; i++) {
+            // pidProfilesMutable(i)->throttle_boost = 0;
+        // }
+    // }
+// #endif
 
     if (
         featureIsConfigured(FEATURE_3D) || !featureIsConfigured(FEATURE_GPS)

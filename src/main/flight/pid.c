@@ -438,9 +438,9 @@ void pidInitFilters(const pidProfile_t *pidProfile)
         pt1FilterInit(&ptermYawLowpass, pt1FilterGain(pidProfile->yaw_lowpass_hz, dT));
     }
 
-#if defined(USE_THROTTLE_BOOST)
-    pt1FilterInit(&throttleLpf, pt1FilterGain(pidProfile->throttle_boost_cutoff, dT));
-#endif
+// #if defined(USE_THROTTLE_BOOST)
+    // pt1FilterInit(&throttleLpf, pt1FilterGain(pidProfile->throttle_boost_cutoff, dT));
+// #endif
 #if defined(USE_ITERM_RELAX)
     if (itermRelax) {
         for (int i = 0; i < XYZ_AXIS_COUNT; i++) {
@@ -540,7 +540,7 @@ static FAST_RAM_ZERO_INIT float crashLimitYaw;
 static FAST_RAM_ZERO_INIT float itermLimit;
 #if defined(USE_THROTTLE_BOOST)
 FAST_RAM_ZERO_INIT float throttleBoost;
-pt1Filter_t throttleLpf;
+//pt1Filter_t throttleLpf;
 #endif
 static FAST_RAM_ZERO_INIT bool itermRotation;
 
@@ -643,7 +643,7 @@ void pidInitConfig(const pidProfile_t *pidProfile)
     crashLimitYaw = pidProfile->crash_limit_yaw;
     itermLimit = pidProfile->itermLimit;
 #if defined(USE_THROTTLE_BOOST)
-    throttleBoost = pidProfile->throttle_boost * 0.1f;
+    throttleBoost = pidProfile->throttle_boost;         // HF3D:  Now using this for flat piro compensation parameter testing
 #endif
     itermRotation = pidProfile->iterm_rotation;
     antiGravityMode = pidProfile->antiGravityMode;
@@ -1304,6 +1304,7 @@ float pidGetAirmodeThrottleOffset()
 // Based on 2DOF reference design (matlab)
 // Called from subTaskPidController() in pid.c
 //   Runs at equal to or slower than the gyro loop update frequency
+static FAST_RAM_ZERO_INIT float yawPidSetpoint;         // HF3D:  Hold the previous corrected Yaw setpoint for flat piro compensation
 void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTimeUs)
 {
     static float previousGyroRateDterm[XYZ_AXIS_COUNT];
@@ -1378,7 +1379,8 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
         gyroRateDterm[axis] = dtermLowpass2ApplyFn((filter_t *) &dtermLowpass2[axis], gyroRateDterm[axis]);
     }
 
-    // HF3D:  iTermRotation acts as Pirouette Compensation on a heli.
+    // HF3D:  iTermRotation acts as FFF Pirouette Compensation on a heli.
+    //   Will not work properly unless the hover roll compensation is outside of the roll integral in the PID controller.
     rotateItermAndAxisError();
 #ifdef USE_RPM_FILTER
     rpmFilterUpdate();
@@ -1427,6 +1429,16 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
         }
 #endif // USE_YAW_SPIN_RECOVERY
 
+        // HF3D:  Flat pirouette compensation
+        //  Compensate for the fact that the main shaft axis is not aligned with the Z axis due to the roll tilt required to compensate for tail blade thrust
+        //  Create a wobble of the main shaft axis around the Z axis by adding roll and pitch commands proportional to the yaw rotation rate
+        if (axis == FD_ROLL) {
+            // HF3D TODO:  Change roll compensation sign based on main motor rotation direction (tail thrust direction)
+            currentPidSetpoint += absf(yawPidSetpoint) / throttleBoost;    // Roll compensation direction is same regardless of yaw direction
+        } else if (axis == FD_PITCH) {
+            currentPidSetpoint += yawPidSetpoint / throttleBoost;          // Pitch compensation direction depends on yaw direction
+        }
+
         // -----calculate error rate
         const float gyroRate = gyro.gyroADCf[axis]; // Process variable from gyro output in deg/sec
         float errorRate = currentPidSetpoint - gyroRate; // r - y
@@ -1452,6 +1464,11 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
 #ifdef USE_ABSOLUTE_CONTROL
         float setpointCorrection = currentPidSetpoint - uncorrectedSetpoint;
 #endif
+
+        // HF3D:  After all setpoint changes are done, get Yaw setpoint for flat pirouette compensation
+        if (axis == FD_YAW) {
+            yawPidSetpoint = currentPidSetpoint;
+        }
 
         // --------low-level gyro-based PID based on 2DOF PID controller. ----------
         // 2-DOF PID controller with optional filter on derivative term.
