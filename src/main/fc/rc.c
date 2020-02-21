@@ -703,10 +703,11 @@ FAST_CODE_NOINLINE void updateRcCommands(void)
         throttlePIDAttenuation = prop / 100.0f;
     }
 
+    int32_t tmp;
     for (int axis = 0; axis < 3; axis++) {
         // non coupled PID reduction scaler used in PID controller 1 and PID controller 2.
 
-        int32_t tmp = MIN(ABS(rcData[axis] - rxConfig()->midrc), 500);
+        tmp = MIN(ABS(rcData[axis] - rxConfig()->midrc), 500);
         if (axis == ROLL || axis == PITCH) {
             if (tmp > rcControlsConfig()->deadband) {
                 tmp -= rcControlsConfig()->deadband;
@@ -727,7 +728,6 @@ FAST_CODE_NOINLINE void updateRcCommands(void)
         }
     }
 
-    int32_t tmp;
     if (featureIsEnabled(FEATURE_3D)) {
         tmp = constrain(rcData[THROTTLE], PWM_RANGE_MIN, PWM_RANGE_MAX);
         tmp = (uint32_t)(tmp - PWM_RANGE_MIN);
@@ -778,7 +778,7 @@ FAST_CODE_NOINLINE void updateRcCommands(void)
         }
     }
     // HF3D:  Adding collective to rcCommands, constrain to -500/+500 range around midrc
-    int32_t tmp = constrain(rcData[COLLECTIVE] - rxConfig()->midrc, -500, 500);
+    tmp = constrain(rcData[COLLECTIVE] - rxConfig()->midrc, -500, 500);
     rcCommand[COLLECTIVE] = tmp;
 }
 
