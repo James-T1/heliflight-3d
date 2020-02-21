@@ -1434,10 +1434,10 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
         // HF3D:  Flat pirouette compensation
         //  Compensate for the fact that the main shaft axis is not aligned with the Z axis due to the roll tilt required to compensate for tail blade thrust
         //  Create a wobble of the main shaft axis around the Z axis by adding roll and pitch commands proportional to the yaw rotation rate
-        if (axis == FD_ROLL && throttle_boost > 5.0f) {
+        if (axis == FD_ROLL && throttleBoost > 1.0f) {
             // HF3D TODO:  Change roll compensation sign based on main motor rotation direction (tail thrust direction)
             currentPidSetpoint += fabsf(yawPidSetpoint) / throttleBoost;    // Roll compensation direction is same regardless of yaw direction
-        } else if (axis == FD_PITCH && throttle_boost > 5.0f) {
+        } else if (axis == FD_PITCH && throttleBoost > 1.0f) {
             currentPidSetpoint += yawPidSetpoint / throttleBoost;          // Pitch compensation direction depends on yaw direction
         }
 
