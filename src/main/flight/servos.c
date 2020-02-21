@@ -441,7 +441,7 @@ void servoMixer(void)
     input[INPUT_RC_PITCH]    = rcData[PITCH]    - rxConfig()->midrc;
     input[INPUT_RC_YAW]      = rcData[YAW]      - rxConfig()->midrc;
     input[INPUT_RC_THROTTLE] = rcData[THROTTLE] - rxConfig()->midrc;
-    input[INPUT_RC_AUX1]     = rcData[AUX1]     - rxConfig()->midrc;                   // HF3D: Updated to use interpolated rcCommand[COLLECTIVE] value
+    input[INPUT_RC_AUX1]     = rcCommand[COLLECTIVE];                   // HF3D: Updated to use interpolated rcCommand[COLLECTIVE] value
     input[INPUT_RC_AUX2]     = rcData[AUX2]     - rxConfig()->midrc;
     input[INPUT_RC_AUX3]     = rcData[AUX3]     - rxConfig()->midrc;
     input[INPUT_RC_AUX4]     = rcData[AUX4]     - rxConfig()->midrc;
