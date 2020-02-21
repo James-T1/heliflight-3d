@@ -1555,8 +1555,9 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
 #endif
 
         // Only enable feedforward for rate mode (flightModeFlag=0 is acro/rate mode)
-        //  HF3D TODO:  May need to change this so horizon & angle modes have feedforward also?
-        const float feedforwardGain = (flightModeFlags) ? 0.0f : pidCoefficient[axis].Kf;
+        //  HF3D:  Changed this so horizon & angle modes have feedforward also
+        //const float feedforwardGain = (flightModeFlags) ? 0.0f : pidCoefficient[axis].Kf;
+        const float feedforwardGain = pidCoefficient[axis].Kf;
         if (feedforwardGain > 0) {
             // transition = 1 if feedForwardTransition == 0   (no transition)
             float transition = feedForwardTransition > 0 ? MIN(1.f, getRcDeflectionAbs(axis) * feedForwardTransition) : 1;
