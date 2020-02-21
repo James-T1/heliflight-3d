@@ -844,7 +844,9 @@ STATIC_UNIT_TESTED float calcHorizonLevelStrength(void)
 STATIC_UNIT_TESTED float pidLevel(int axis, const pidProfile_t *pidProfile, const rollAndPitchTrims_t *angleTrim, float currentPidSetpoint) {
     // calculate error angle and limit the angle to the max inclination
     // rcDeflection is in range [-1.0, 1.0]
-    float angle = pidProfile->levelAngleLimit * getRcDeflection(axis);
+    // HF3D:  Use Angle mode as Rescue.  Ignore stick inputs.
+    //float angle = pidProfile->levelAngleLimit * getRcDeflection(axis);
+    float angle = 0;
 #ifdef USE_GPS_RESCUE
     angle += gpsRescueAngle[axis] / 100; // ANGLE IS IN CENTIDEGREES
 #endif
@@ -1432,10 +1434,10 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
         // HF3D:  Flat pirouette compensation
         //  Compensate for the fact that the main shaft axis is not aligned with the Z axis due to the roll tilt required to compensate for tail blade thrust
         //  Create a wobble of the main shaft axis around the Z axis by adding roll and pitch commands proportional to the yaw rotation rate
-        if (axis == FD_ROLL) {
+        if (axis == FD_ROLL && throttle_boost > 5.0f) {
             // HF3D TODO:  Change roll compensation sign based on main motor rotation direction (tail thrust direction)
             currentPidSetpoint += fabsf(yawPidSetpoint) / throttleBoost;    // Roll compensation direction is same regardless of yaw direction
-        } else if (axis == FD_PITCH) {
+        } else if (axis == FD_PITCH && throttle_boost > 5.0f) {
             currentPidSetpoint += yawPidSetpoint / throttleBoost;          // Pitch compensation direction depends on yaw direction
         }
 
