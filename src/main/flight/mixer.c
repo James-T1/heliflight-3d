@@ -812,6 +812,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         }
         
         // HF3D:  Quick and dirty collective pitch pre-compensation for the tail motor
+        // HF3D TODO:  Modify this to use interpolated rcCommand[COLLECTIVE] value instead.
         uint8_t stickPercent = 0;
         if ((rcData[AUX1] >= PWM_RANGE_MAX) || (rcData[AUX1] <= PWM_RANGE_MIN)) {
             stickPercent = 100;
