@@ -1434,7 +1434,7 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
         //  Create a wobble of the main shaft axis around the Z axis by adding roll and pitch commands proportional to the yaw rotation rate
         if (axis == FD_ROLL) {
             // HF3D TODO:  Change roll compensation sign based on main motor rotation direction (tail thrust direction)
-            currentPidSetpoint += absf(yawPidSetpoint) / throttleBoost;    // Roll compensation direction is same regardless of yaw direction
+            currentPidSetpoint += fabsf(yawPidSetpoint) / throttleBoost;    // Roll compensation direction is same regardless of yaw direction
         } else if (axis == FD_PITCH) {
             currentPidSetpoint += yawPidSetpoint / throttleBoost;          // Pitch compensation direction depends on yaw direction
         }
