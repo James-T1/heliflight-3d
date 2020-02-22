@@ -777,9 +777,33 @@ FAST_CODE_NOINLINE void updateRcCommands(void)
             rcCommand[YAW] = rcCommandBuff.Z;
         }
     }
+    
     // HF3D:  Adding collective to rcCommands, constrain to -500/+500 range around midrc
     tmp = constrain(rcData[COLLECTIVE] - rxConfig()->midrc, -500, 500);
     rcCommand[COLLECTIVE] = tmp;
+    
+#if defined(USE_ACC)
+    // HF3D:  Rescue (angle) mode overrides user's collective pitch rcCommand
+    // attitude.values.roll/pitch = 0 when level, 1800 when fully inverted (decidegrees)
+    // Divide by 10 and convert to float to give:  0 at level, 90 at vertical, 180 at inverted (degrees):
+    const float currentInclination = MAX(ABS(attitude.values.roll), ABS(attitude.values.pitch)) / 10.0f;
+    // Check if rescue (angle) mode is active
+    if (FLIGHT_MODE(ANGLE_MODE)) {    // || FLIGHT_MODE(GPS_RESCUE_MODE)
+        // adjust collective pitch so heli has no collective while past vertical, and pitch is added as it approaches level
+        if (currentInclination > 90) {
+            rcCommand[COLLECTIVE] = 0;
+        } else {
+            // inclination between 90 (vertical) and 0 degrees (level)
+            // Hover pitch on my M2 test rig is around +100, full pitch pumps are around +240
+            // Desired collective at various rescue pitches:
+            //   90deg = 0 collective, 60deg=25col, 45deg=60col, 30deg=110col, 10deg=190col, 0deg=240col
+            // HF3D TODO:  Add collective pitch calibration parameters for user to set, along with rescue collective agression parameter
+            const float vertCurrentInclination = 90 - currentInclination;
+            rcCommand[COLLECTIVE] = 0.02963f * vertCurrentInclination * vertCurrentInclination;
+        }
+    }
+#endif
+    
 }
 
 void resetYawAxis(void)

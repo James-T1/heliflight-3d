@@ -1414,6 +1414,9 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
 #if defined(USE_ACC)
         if (levelModeActive && (axis != FD_YAW)) {
             currentPidSetpoint = pidLevel(axis, pidProfile, angleTrim, currentPidSetpoint);
+        } else if (FLIGHT_MODE(ANGLE_MODE) && (axis == FD_YAW)) {
+            // HF3D:  Don't allow user to give yaw input while rescue (angle) mode corrections are occuring
+            currentPidSetpoint = 0.0f;
         }
 #endif
 
