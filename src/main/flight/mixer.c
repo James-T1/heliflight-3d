@@ -608,6 +608,7 @@ static void calculateThrottleAndCurrentMotorEndpoints(timeUs_t currentTimeUs)
 #endif
         // if not in 3D mode:    rcCommandThrottleRange = PWM_RANGE_MAX - PWM_RANGE_MIN;
         currentThrottleInputRange = rcCommandThrottleRange;
+        // motorOutputLow includes the increase from digitalIdleOffset!
         // if DynIdle not used:  motorRangeMinIncrease = 0
         motorRangeMin = motorOutputLow + motorRangeMinIncrease * (motorOutputHigh - motorOutputLow);
         motorRangeMax = motorOutputHigh;
@@ -755,27 +756,38 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
             
         }
         
-        mainMotorThrottle = throttle;        // Used by the tail code to set the base tail motor output as a fraction of main motor output
-        // Original code to scale throttle to motor output range
-        float motorOutput = motorOutputMin + motorOutputRange * throttle;
+        mainMotorThrottle = throttle;        // Used by the tail motor code to set the base tail motor output as a fraction of main motor output
+        
+        // HF3D:  Modified original code to ignore any idle offset value when scaling main motor output -- we should always ensure that the main motor will be 100% stopped at zero throttle.
+        //   motorOutputMin = motorRangeMin = motorOutputLow = DSHOT_MIN_THROTTLE
+#ifdef USE_DSHOT
+        float motorOutput = DSHOT_MIN_THROTTLE + (motorOutputHigh - DSHOT_MIN_THROTTLE) * throttle;
+#else
+        //   for analog PWM, change motorOutputMin to disarmMotorOutput to be safe
+        float motorOutput = disarmMotorOutput + (motorOutputHigh - disarmMotorOutput) * throttle;
+#endif
+
         if (failsafeIsActive()) {
 #ifdef USE_DSHOT
             if (isMotorProtocolDshot()) {
-                motorOutput = (motorOutput < motorRangeMin) ? disarmMotorOutput : motorOutput; // Prevent getting into special reserved range
+                motorOutput = (motorOutput < DSHOT_MIN_THROTTLE) ? disarmMotorOutput : motorOutput; // Prevent getting into special reserved range
             }
 #endif
-            motorOutput = constrain(motorOutput, disarmMotorOutput, motorRangeMax);
+            motorOutput = constrain(motorOutput, disarmMotorOutput, motorRangeMax);        // motorRangeMax = motorOutputHigh   for uni-directional motor rotation
         } else {
             // HF3D:  Prevent main motor from running or twitching when dshot_idle_value is used.
 #ifdef USE_DSHOT
             if (isMotorProtocolDshot()) {
                 // Use DSHOT_MIN_THROTTLE to allow the main motor to come to a complete stop at any time
-                //   Also prevents the main motor from "twitching" if the dshot_idle_value is setup to prevent the tail motor from stopping
+                // Also prevents the main motor from "twitching" if the dshot_idle_value is setup to prevent the tail motor from stopping
                 motorOutput = constrain(motorOutput, DSHOT_MIN_THROTTLE, motorRangeMax);
-            }
-#else
-            motorOutput = constrain(motorOutput, motorRangeMin, motorRangeMax);
+            } else
 #endif
+            {
+                // HF3D:  For analog PWM control of main motor ESC, motorRangeMin includes motorConfig()->minthrottle parameter.  
+                //   This is NOT good.  Any idle minthrottle setting will cause the ESC to twitch when at zero throttle.  Set to disarmMotorOutput for now just to be safe.
+                motorOutput = constrain(motorOutput, disarmMotorOutput, motorRangeMax);
+            }
         }
         motor[0] = motorOutput;
         
@@ -845,7 +857,8 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         //  ^^ Actually, I think this is a bad idea.  Base tail thrust will actually need to INCREASE for lower headspeeds.  Lower mainshaft rpm with some power input = more torque necessary.
         //motorOutput += (mainMotorRPM/6000.0f)*tailMotorBaseThrustGain;    // Just guessing that 20% thrust on tail will be about right for 100% rpm on head.  Nevermind, see above.  This is wrong.
 
-        // scale to full motor output range
+        // scale tail motor output to full motor output range, including impact of any idle offset.  
+        // Note that motorOutput here can still be < 0 if the motorMix is sufficiently negative.  Idle offset will be taken into account again down below.
         motorOutput = motorOutputMin + motorOutputRange * motorOutput;
 
         if (failsafeIsActive()) {
@@ -867,10 +880,17 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
                     // Use DSHOT_MIN_THROTTLE to allow the tail to come to a complete stop when main motor isn't running
                     motorOutput = constrain(motorOutput, DSHOT_MIN_THROTTLE, motorRangeMax);
                 }
-            }
-#else
-            motorOutput = constrain(motorOutput, motorRangeMin, motorRangeMax);
+            } else
 #endif
+            {
+                // Handle analog PWM tail motor ESC.  Not sure why anyone would do that... but, okay.
+                if (mainMotorThrottle > 0.0) {
+                    // Use minThrottle value to prevent tail from stopping when main motor is running
+                    motorOutput = constrain(motorOutput, motorRangeMin, motorRangeMax);
+                } else {
+                    motorOutput = constrain(motorOutput, disarmMotorOutput, motorRangeMax);
+                }
+            }
         }
         motor[1] = motorOutput;     // Set final tail motor output
 
