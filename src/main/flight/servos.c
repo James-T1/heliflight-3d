@@ -410,7 +410,7 @@ void servoMixer(void)
         input[INPUT_STABILIZED_PITCH] = rcCommand[PITCH];
         input[INPUT_STABILIZED_YAW] = rcCommand[YAW];
     } else {
-        // Assisted modes (gyro only or gyro+acc according to AUX configuration in Gui
+        // Assisted modes (gyro only or gyro+acc according to flight mode / AUX switch configuration)
         // Default PID_SERVO_MIXER_SCALING = 0.7f
         // HF3D TODO:  Consider using yawPidSumLimit like mixer.c does for motors?
         //  * Already added roll/pitch pidSumLimit to this code.
@@ -419,7 +419,7 @@ void servoMixer(void)
         input[INPUT_STABILIZED_PITCH] = constrainf(pidData[FD_PITCH].Sum, -currentPidProfile->pidSumLimit, currentPidProfile->pidSumLimit) * PID_SERVO_MIXER_SCALING;
         input[INPUT_STABILIZED_YAW] = pidData[FD_YAW].Sum * PID_SERVO_MIXER_SCALING;
 
-        // Reverse yaw servo when inverted in 3D mode
+        // Reverse yaw servo when inverted in 3D mode (Betaflight code meant for FPV)
         // HF3D:  LOL - Remove this in case somebody enables the 3D mode.  It would kind of be hilarious though.
         if (featureIsEnabled(FEATURE_3D) && (rcData[THROTTLE] < rxConfig()->midrc)) {
             input[INPUT_STABILIZED_YAW] *= -1;
@@ -446,6 +446,7 @@ void servoMixer(void)
     input[INPUT_RC_AUX3]     = rcData[AUX3]     - rxConfig()->midrc;
     input[INPUT_RC_AUX4]     = rcData[AUX4]     - rxConfig()->midrc;
 
+    // initialize our output value for each servo to zero
     for (int i = 0; i < MAX_SUPPORTED_SERVOS; i++) {
         servo[i] = 0;
     }
@@ -509,8 +510,8 @@ void servoMixer(void)
     }
 
     for (int i = 0; i < MAX_SUPPORTED_SERVOS; i++) {
-        servo[i] = ((int32_t)servoParams(i)->rate * servo[i]) / 100L;        // multiply the calculated servo mixer output by the gain (rate) for that particular servo
-        servo[i] += determineServoMiddleOrForwardFromChannel(i);             // add our result to the center of the servo's range
+        servo[i] = ((int32_t)servoParams(i)->rate * servo[i]) / 100L;        // multiply the calculated servo mixer output by the servo gain (rate) for this servo (usually the result is usually no change)
+        servo[i] += determineServoMiddleOrForwardFromChannel(i);             // add our result to the center of the servo's range (or to forwarded rcCommand value if forwarding is assigned for this channel)
     }
 }
 

@@ -39,6 +39,7 @@ FAST_RAM_ZERO_INIT pwmOutputPort_t motors[MAX_SUPPORTED_MOTORS];
 
 static void pwmOCConfig(TIM_TypeDef *tim, uint8_t channel, uint16_t value, uint8_t output)
 {
+    // HAL driver used for timers on F7 and H7 mcus
 #if defined(USE_HAL_DRIVER)
     TIM_HandleTypeDef* Handle = timerFindTimerHandle(tim);
     if (Handle == NULL) return;
@@ -83,14 +84,20 @@ void pwmOutConfig(timerChannel_t *channel, const timerHardware_t *timerHardware,
     if (Handle == NULL) return;
 #endif
 
+    // Configure the time-base unit for this timer.  The TBU is shared by all channels on this timer.
+    //  This means that all output channels on this timer are sharing a common PWM output frequency.
     configTimeBase(timerHardware->tim, period, hz);
+
+    // Configure and initialize this timer output compare channel for PWM and enable preload.
     pwmOCConfig(timerHardware->tim,
         timerHardware->channel,
         value,
         inversion ? timerHardware->output ^ TIMER_OUTPUT_INVERTED : timerHardware->output
         );
 
+    // Enable the PWM output on this Timer
 #if defined(USE_HAL_DRIVER)
+    // F7 and H7 devices use HAL driver for access to some peripherals like timers - see MCU_COMMON_SRC differences in the mcu makefiles
     if (timerHardware->output & TIMER_OUTPUT_N_CHANNEL)
         HAL_TIMEx_PWMN_Start(Handle, timerHardware->channel);
     else
@@ -101,10 +108,15 @@ void pwmOutConfig(timerChannel_t *channel, const timerHardware_t *timerHardware,
     TIM_Cmd(timerHardware->tim, ENABLE);
 #endif
 
+    // save the address of this channel's condition code register so we can update it later
+    // CCR can now be updated with our desired duty cycle percentage on the output
     channel->ccr = timerChCCR(timerHardware);
 
     channel->tim = timerHardware->tim;
 
+    // As long as the channel is configured in output mode, the content of the TIMx_CCRy channel register is compared to the content of the timer counter.  This drives the channel output.
+    //   https://www.st.com/resource/en/application_note/dm00236305-generalpurpose-timer-cookbook-for-stm32-microcontrollers-stmicroelectronics.pdf
+    // Set CCR value to zero to get 0% duty cycle on the PWM output we just configured
     *channel->ccr = 0;
 }
 
@@ -304,7 +316,7 @@ void servoDevInit(const servoDevConfig_t *servoConfig)
         const timerHardware_t *timer = timerAllocate(tag, OWNER_SERVO, RESOURCE_INDEX(servoIndex));
 
         if (timer == NULL) {
-            /* flag failure and disable ability to arm */
+            // TODO:  flag failure and disable ability to arm?
             break;
         }
 
