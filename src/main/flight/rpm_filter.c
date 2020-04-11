@@ -150,9 +150,9 @@ void rpmFilterInit(const rpmFilterConfig_t *config)
     
     for (int i = 0; i < getMotorCount(); i++) {
         // init PT1 filter with dT= 0.0005  (Default for 2kHz = 500 pidLooptime)
-        // Default rpm_lpf cutoff = 150Hz with dT=0.0005 ==> k = 0.32
-        //   ===>  1/.32 ~= 3 samples delay for rpm filter to reach steady state
-        //   ===>  3 samples * 0.5ms per sample ~= 1.5ms delay on RPM signal
+        // Default rpm_lpf cutoff = 150Hz with dT=0.0005 ==> k = 0.32  (calculated by pt1FilterGain)
+        //   ===>  1/.32 ~= 3 samples delay for rpm to reach reasonable approximation of change
+        //   ===>  3 samples * 0.5ms per sample ~= 1.5ms delay on RPM signal (10% step change in signal will converge to 1% offset in 5 samples, or ~2.5ms)
         pt1FilterInit(&rpmFilters[i], pt1FilterGain(config->rpm_lpf, pidLooptime * 1e-6f));
     }
 

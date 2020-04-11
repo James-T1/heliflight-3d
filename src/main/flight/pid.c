@@ -64,12 +64,12 @@
 
 // HF3D:  Inits for PID Delay Compensation
 // Delay length = 8000Hz * 35ms = 280 loop times
-#define DELAYLENGTH  280            
+/*#define DELAYLENGTH  280            
 FAST_RAM_ZERO_INIT int delayArrayPos = 0;
 int16_t delayArrayRoll[DELAYLENGTH] = {0};
 int16_t delayArrayPitch[DELAYLENGTH] = {0};
 FAST_RAM_ZERO_INIT float delayCompSum[3] = {0.0f};
-FAST_RAM_ZERO_INIT float delayCompAlpha = 0.0f;
+FAST_RAM_ZERO_INIT float delayCompAlpha = 0.0f; */
 // End inits for PID Delay Compensation
 
 const char pidNames[] =
@@ -752,7 +752,7 @@ void pidInit(const pidProfile_t *pidProfile)
     //  280 samples ==> 0.0036 would give the average of the last 280 samples of control output = subtracted off the output
     //  2.5x average is where you probably want to be... around 0.009, or a setting of 9
     // Uses crashflip_motor_percent for the setting since we have no use for that in a heli.
-    delayCompAlpha = mixerConfig()->crashflip_motor_percent / 1000.0f;
+    /* delayCompAlpha = mixerConfig()->crashflip_motor_percent / 1000.0f; */
 }
 
 #ifdef USE_ACRO_TRAINER
@@ -864,7 +864,7 @@ STATIC_UNIT_TESTED float pidLevel(int axis, const pidProfile_t *pidProfile, cons
     return currentPidSetpoint;
 }
 
-static timeUs_t crashDetectedAtUs;
+/* static timeUs_t crashDetectedAtUs;
 
 static void handleCrashRecovery(
     const pidCrashRecovery_e crash_recovery, const rollAndPitchTrims_t *angleTrim,
@@ -906,9 +906,9 @@ static void handleCrashRecovery(
             }
         }
     }
-}
+} */
 
-static void detectAndSetCrashRecovery(
+/* static void detectAndSetCrashRecovery(
     const pidCrashRecovery_e crash_recovery, const int axis,
     const timeUs_t currentTimeUs, const float delta, const float errorRate)
 {
@@ -938,7 +938,7 @@ static void detectAndSetCrashRecovery(
             BEEP_OFF;
         }
     }
-}
+} */
 #endif // USE_ACC
 
 #ifdef USE_ACRO_TRAINER
@@ -1336,6 +1336,7 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
 #endif
 
 #ifdef USE_YAW_SPIN_RECOVERY
+    // Check for ICM gyro overflow "to the moon" yaw spin
     const bool yawSpinActive = gyroYawSpinDetected();
 #endif
 
@@ -1434,7 +1435,7 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
         }
 #endif // USE_YAW_SPIN_RECOVERY
 
-        // HF3D:  Flat pirouette compensation
+        // HF3D TODO:  Flat pirouette compensation
         //  Compensate for the fact that the main shaft axis is not aligned with the Z axis due to the roll tilt required to compensate for tail blade thrust
         //  Create a wobble of the main shaft axis around the Z axis by adding roll and pitch commands proportional to the yaw rotation rate
         if (axis == FD_ROLL && throttleBoost > 1.0f) {
@@ -1447,12 +1448,12 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
         // -----calculate error rate
         const float gyroRate = gyro.gyroADCf[axis]; // Process variable from gyro output in deg/sec
         float errorRate = currentPidSetpoint - gyroRate; // r - y
-#if defined(USE_ACC)
+/* #if defined(USE_ACC)
         handleCrashRecovery(
             pidProfile->crash_recovery, angleTrim, axis, currentTimeUs, gyroRate,
             &currentPidSetpoint, &errorRate);
 #endif
-
+ */
         const float previousIterm = pidData[axis].I;
         float itermErrorRate = errorRate;
 #ifdef USE_ABSOLUTE_CONTROL
@@ -1519,11 +1520,11 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
             const float delta =
                 - (gyroRateDterm[axis] - previousGyroRateDterm[axis]) * pidFrequency;
 
-#if defined(USE_ACC)
+/* #if defined(USE_ACC)
             if (cmpTimeUs(currentTimeUs, levelModeStartTimeUs) > CRASH_RECOVERY_DETECTION_DELAY_US) {
                 detectAndSetCrashRecovery(pidProfile->crash_recovery, axis, currentTimeUs, delta, errorRate);
             }
-#endif
+#endif */
 
             float dMinFactor = 1.0f;
 #if defined(USE_D_MIN)
@@ -1563,7 +1564,7 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
         const float feedforwardGain = pidCoefficient[axis].Kf;
         if (feedforwardGain > 0) {
             // transition = 1 if feedForwardTransition == 0   (no transition)
-            float transition = feedForwardTransition > 0 ? MIN(1.f, getRcDeflectionAbs(axis) * feedForwardTransition) : 1;
+            float transition = feedForwardTransition > 0 ? MIN(1.f, getRcDeflectionAbs(axis) * feedForwardTransition) : 1.0f;
             // HF3D:  Direct stick feedforward for roll and pitch.  Stick delta feedforward for yaw.
             // Let's do direct stick feedforward for roll & pitch, and let's AMP IT UP A LOT.
             // 0.013754 * 90 * 1 * 60 deg/s = 74 output for 100 feedForward gain
@@ -1578,7 +1579,9 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
             if (axis == FD_YAW) {
                 pidData[axis].F = shouldApplyFfLimits(axis) ?
                     applyFfLimit(axis, feedForward, pidCoefficient[axis].Kp, currentPidSetpoint) : feedForward;
-            }
+            } else {
+               pidData[axis].F = feedForward;
+            }               
 #else
             pidData[axis].F = feedForward;
 #endif
@@ -1611,7 +1614,7 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
         }
     }
 
-    // HF3D:  PID Delay Compensation
+/*     // HF3D:  PID Delay Compensation
     //  Allows for higher PID gains since the previous control actions the helicopter hasn't responded to yet are taken into account in the PID controller output
     // Update the PID sums by subtracting the previous unresponded control inputs from the current PID controller outputs
     pidData[FD_ROLL].Sum -= delayCompAlpha * delayCompSum[FD_ROLL];
@@ -1631,10 +1634,10 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
     delayArrayPos++;
     if (delayArrayPos >= DELAYLENGTH) {
         delayArrayPos = 0;    // Reset pointer into array to the beginning
-    }
+    } */
 
     // Disable PID control if at zero throttle or if gyro overflow detected
-    // This may look very innefficient, but it is done on purpose to always show real CPU usage as in flight
+    // This may look very inefficient, but it is done on purpose to always show real CPU usage as in flight
     if (!pidStabilisationEnabled || gyroOverflowDetected()) {
         for (int axis = FD_ROLL; axis <= FD_YAW; ++axis) {
             pidData[axis].P = 0;
@@ -1644,8 +1647,8 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
 
             pidData[axis].Sum = 0;
         }
-        delayCompSum[FD_ROLL] = 0;
-        delayCompSum[FD_PITCH] = 0;
+/*         delayCompSum[FD_ROLL] = 0;
+        delayCompSum[FD_PITCH] = 0; */
     } else if (zeroThrottleItermReset) {
         pidResetIterm();
     }

@@ -233,8 +233,11 @@ FAST_CODE_NOINLINE bool pwmStartDshotMotorUpdate(void)
                 if (value != 0xffff) {
                     dshotTelemetryState.motorState[i].telemetryValue = value;
                     dshotTelemetryState.motorState[i].telemetryActive = true;
-                    if (i < 4) {
-                        DEBUG_SET(DEBUG_DSHOT_RPM_TELEMETRY, i, value);
+                    if (i < 2) {
+                        // erpm/100 (value) should never exceed ~32,767 (3.27M erpm)
+                        DEBUG_SET(DEBUG_DSHOT_RPM_TELEMETRY, i, (int16_t) value);
+                        // HF3D:  Also log invalid packet count on debug 2 & 3 since we only have a maximum of 2 motors.
+                        DEBUG_SET(DEBUG_DSHOT_RPM_TELEMETRY, i+2, dshotTelemetryState.invalidPacketCount);
                     }
 #ifdef USE_DSHOT_TELEMETRY_STATS
                     validTelemetryPacket = true;

@@ -476,8 +476,11 @@ static bool bbUpdateStart(void)
             if (value != BB_INVALID) {
                 dshotTelemetryState.motorState[motorIndex].telemetryValue = value;
                 dshotTelemetryState.motorState[motorIndex].telemetryActive = true;
-                if (motorIndex < 4) {
-                    DEBUG_SET(DEBUG_DSHOT_RPM_TELEMETRY, motorIndex, value);
+                if (motorIndex < 2) {
+                    // erpm/100 (value) should never exceed ~32,767 (3.27M erpm)
+                    DEBUG_SET(DEBUG_DSHOT_RPM_TELEMETRY, motorIndex, (int16_t) value);   
+                    // HF3D:  Also log invalid packet count on debug 2 & 3 since we only have a maximum of 2 motors.
+                    DEBUG_SET(DEBUG_DSHOT_RPM_TELEMETRY, motorIndex+2, dshotTelemetryState.invalidPacketCount);
                 }
             } else {
                 dshotTelemetryState.invalidPacketCount++;

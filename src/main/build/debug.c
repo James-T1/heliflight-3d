@@ -32,6 +32,7 @@ uint32_t sectionTimes[2][4];
 #endif
 
 // Please ensure that these names are aligned with the enum values defined in 'debug.h'
+// These values must also be in sync with Betaflight Configurator and Blackbox Explorer
 const char * const debugModeNames[DEBUG_COUNT] = {
     "NONE",
     "CYCLETIME",
@@ -68,6 +69,7 @@ const char * const debugModeNames[DEBUG_COUNT] = {
     "SDIO",
     "CURRENT_SENSOR",
     "USB",
+    "SMARTAUDIO",       // HF3D TODO:  No longer used, but removing it requires updating Configurator and BB Explorer debug lists to keep them in sync
     "RTH",
     "ITERM_RELAX",
     "ACRO_TRAINER",
