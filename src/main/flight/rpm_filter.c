@@ -87,7 +87,7 @@ PG_REGISTER_WITH_RESET_FN(rpmFilterConfig_t, rpmFilterConfig, PG_RPM_FILTER_CONF
 void pgResetFn_rpmFilterConfig(rpmFilterConfig_t *config)
 {
     config->gyro_rpm_notch_harmonics = 3;
-    config->gyro_rpm_notch_min = 100;
+    config->gyro_rpm_notch_min = 25;
     config->gyro_rpm_notch_q = 500;
 
     config->dterm_rpm_notch_harmonics = 0;
@@ -250,7 +250,8 @@ FAST_CODE_NOINLINE void rpmFilterUpdate()
                     // Tail motor uses erpmToHz1
                     motorFrequency[currentMotor] = erpmToHz1 * filteredMotorErpm[currentMotor];
                 } else {
-                    motorFrequency[currentMotor] = erpmToHz * filteredMotorErpm[currentMotor];
+                    // HF3D:  The main blades/head will be causing the main vibrations, so use gearRatio to get headspeed
+                    motorFrequency[currentMotor] = erpmToHz * filteredMotorErpm[currentMotor] / mixerGetGovGearRatio();
                 }
                 minMotorFrequency = 0.0f;
             }

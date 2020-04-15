@@ -123,4 +123,9 @@ void mixerSetThrottleAngleCorrection(int correctionValue);
 float mixerGetThrottle(void);
 mixerMode_e getMixerMode(void);
 bool isFixedWing(void);
+
+// HF3D
 uint8_t isHeliSpooledUp(void);
+float mixerGetGovCollectiveFF(void);
+float mixerGetGovCollectivePulseFF(void);
+float mixerGetGovGearRatio(void);

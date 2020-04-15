@@ -674,6 +674,8 @@ FAST_RAM_ZERO_INIT float govBaseThrottle;
 FAST_RAM_ZERO_INIT float govPidSum = 0;
 FAST_RAM_ZERO_INIT float govI = 0;
 FAST_RAM_ZERO_INIT float collectiveStickLPF = 0;
+FAST_RAM_ZERO_INIT float govCollectiveFF = 0;
+FAST_RAM_ZERO_INIT float govCollectivePulseFF = 0;
 
 static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t *activeMixer)
 {
@@ -787,7 +789,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         //   Reasonable value would be 0.15 throttle addition for 12-degree collective throw..
         //   So gains in the 0.0015 - 0.0032 range depending on where max collective pitch is on the heli
         //   HF3D TODO:  Set this up so works off of a calibrated pitch value for the heli taken during setup
-        float govCollectiveFF = govColKf * collectiveStickPercent;
+        govCollectiveFF = govColKf * collectiveStickPercent;
         
         // HF3D:  Collective pitch impulse feed-forward for the main motor
         // Run our collectiveStickPercent through a low pass filter
@@ -795,7 +797,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         // Subtract LPF from the original value to get a high pass filter
         float collectiveStickHPF = collectiveStickPercent - collectiveStickLPF;
         // Calculate the feedforward result
-        float govCollectivePulseFF = govColPulseKf * collectiveStickHPF;
+        govCollectivePulseFF = govColPulseKf * collectiveStickHPF;
 
         // HF3D TODO:  Add a cyclic stick feedforward to the governor - linear gain should be fine.
         // Additional torque is required from the motor when adding cyclic pitch, just like collective (although less)
@@ -821,6 +823,11 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
             govI = constrainf(govI + govKi * govError * pidGetDT(), -50.0f, 50.0f);
             govPidSum = govP + govI;
             // float govPidSum = govP + govI;
+            
+            // HF3D TODO:  Scale the sums based on the average battery voltage?
+            //  Note:  This should NOT apply to the tail feedforward compensations that go into the PID controller!
+            //         Those compensations are related to the amount of TORQUE only... and this comp would be trying
+            //            to keep torque equal, so those shouldn't have to change.
             
             // Generate our new governed throttle signal
             throttle = govBaseThrottle + govCollectiveFF + govCollectivePulseFF + govPidSum;
@@ -1206,4 +1213,19 @@ uint8_t isHeliSpooledUp(void)
     //   Jacking around with the throttle during spoolup could cause it to set the spooledUp flag instantly if you're already above 1000rpm
     //   If user spools up above 1000rpm, then lowers throttle below the last spool target reached, the heli will be considered spooled up
     return spooledUp;
+}
+
+float mixerGetGovCollectiveFF(void)
+{
+    return govCollectiveFF;
+}
+
+float mixerGetGovCollectivePulseFF(void)
+{
+    return govCollectivePulseFF;
+}
+
+float mixerGetGovGearRatio(void)
+{
+    return govGearRatio;
 }

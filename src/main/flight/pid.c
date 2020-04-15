@@ -1612,6 +1612,36 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
         {
             pidData[axis].Sum = pidSum;
         }
+        
+        // HF3D:  Calculate tail feedforward precompensation and add it to the pidSum on the Yaw channel
+        if (axis == FD_YAW) {
+            // Note that the values below will always be 1 looptime behind the true stick inputs since mixer runs after pid.
+            //   Doesn't matter for our purposes here.  Looptimes are so fast anyway, and tail has less lag than other ESC/servos.
+            float tailCollectiveFF = mixerGetGovCollectiveFF();
+            float tailCollectivePulseFF = mixerGetGovCollectivePulseFF();
+            // These values include the governor FF gains (Kf), so they will be on a 0-1.0 scale 
+            // Torque will always cause the tail to rotate in in the same direction, so we just need to apply this offset in the correct direction.
+            // For CW rotation of the rotor, the torque will turn the body of the helicopter CCW
+            //   This means the leading edge of the tail blade needs to tip towards the left side of the helicopter to counteract it.
+            //   Right yaw stick = clockwise rotation = tip of tail blade to left = POSITIVE servo values
+            //   Right yaw stick = positive control channel PWM values from the TX also.
+            // //  Smix on my rudder channel is setup for -100... so it will take NEGATIVE values in the pidSum to create positive servo movement!
+            
+            //   So my collective comp also needs to make positive tail servo value... but need to check the smix for reversal first!!
+            //     But once it's done this time it will be correct for any other heli that's setup correctly, regardless of servo reversal
+            //     ... as long as it yaws the correct direction from the sticks.
+            
+            // HF3D TODO:  Add a "main rotor rotation direction" configuration parameter.
+            
+
+            // HF3D TODO:  Consider adding a delay in here to allow time for other things to occur...
+            //  Tail servo can probably add pitch faster than the swash servos can add collective pitch
+            //   and it's definitely faster than the ESC can add torque to the main motor (for gov impulse)
+            //  But for motor-driven tails the delay may not be needed... depending on how fast the ESC+motor
+            //   can spin up the tail blades relative to the other pieces of the puzzle.
+        }
+        
+        
     }
 
 /*     // HF3D:  PID Delay Compensation
