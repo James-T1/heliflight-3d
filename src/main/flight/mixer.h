@@ -126,6 +126,5 @@ bool isFixedWing(void);
 
 // HF3D
 uint8_t isHeliSpooledUp(void);
-float mixerGetGovCollectiveFF(void);
-float mixerGetGovCollectivePulseFF(void);
 float mixerGetGovGearRatio(void);
+float mixerGetGovCollectivePulseFilterGain(void);

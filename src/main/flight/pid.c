@@ -55,6 +55,9 @@
 
 #include "pg/pg.h"
 #include "pg/pg_ids.h"
+#include "pg/rx.h"
+
+#include "rx/rx.h"
 
 #include "sensors/acceleration.h"
 #include "sensors/battery.h"
@@ -220,6 +223,12 @@ void resetPidProfile(pidProfile_t *pidProfile)
         .ff_max_rate_limit = 100,
         .ff_smooth_factor = 37,
         .ff_boost = 15,
+        // HF3D parameters
+        .yawColKf = 300,
+        .yawColPulseKf = 300,
+        .yawCycKf = 0,
+        .yawBaseThrust = 900,
+        .rescue_collective = 200,
     );
 #ifndef USE_D_MIN
     pidProfile->pid[PID_ROLL].D = 30;
@@ -1307,6 +1316,9 @@ float pidGetAirmodeThrottleOffset()
 // Called from subTaskPidController() in pid.c
 //   Runs at equal to or slower than the gyro loop update frequency
 static FAST_RAM_ZERO_INIT float yawPidSetpoint;         // HF3D:  Hold the previous corrected Yaw setpoint for flat piro compensation
+static FAST_RAM_ZERO_INIT float collectiveStickPercent;        // HF3D
+static FAST_RAM_ZERO_INIT float collectiveStickLPF;            // HF3D:  Collective stick values
+static FAST_RAM_ZERO_INIT float collectiveStickHPF;
 void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTimeUs)
 {
     static float previousGyroRateDterm[XYZ_AXIS_COUNT];
@@ -1615,32 +1627,68 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
         
         // HF3D:  Calculate tail feedforward precompensation and add it to the pidSum on the Yaw channel
         if (axis == FD_YAW) {
-            // Note that the values below will always be 1 looptime behind the true stick inputs since mixer runs after pid.
-            //   Doesn't matter for our purposes here.  Looptimes are so fast anyway, and tail has less lag than other ESC/servos.
-            float tailCollectiveFF = mixerGetGovCollectiveFF();
-            float tailCollectivePulseFF = mixerGetGovCollectivePulseFF();
-            // These values include the governor FF gains (Kf), so they will be on a 0-1.0 scale 
-            // Torque will always cause the tail to rotate in in the same direction, so we just need to apply this offset in the correct direction.
-            // For CW rotation of the rotor, the torque will turn the body of the helicopter CCW
+            
+            // Calculate absolute value of the percentage of collective stick throw
+            if ((rcCommand[COLLECTIVE] >= 500) || (rcCommand[COLLECTIVE] <= -500)) {
+                collectiveStickPercent = 100.0f;
+            } else {
+                if (rcCommand[COLLECTIVE] >= 0) {
+                    collectiveStickPercent = (rcCommand[COLLECTIVE] * 100.0f) / (PWM_RANGE_MAX - rxConfig()->midrc);
+                } else if (rcCommand[COLLECTIVE] < 0) {
+                    collectiveStickPercent = (rcCommand[COLLECTIVE] * -100.0f) / (rxConfig()->midrc - PWM_RANGE_MIN);
+                }
+            }
+            
+            // Collective pitch impulse feed-forward for the main motor
+            // Run our collectiveStickPercent through a low pass filter
+            // HF3D TODO:  Pulse filter calc should probably be moved to PID?  But it's probably shouldn't be a profile setting?
+            collectiveStickLPF = collectiveStickLPF + mixerGetGovCollectivePulseFilterGain() * (collectiveStickPercent - collectiveStickLPF);
+            // Subtract LPF from the original value to get a high pass filter
+            // HPF value will be <60% or so of the collectiveStickPercent, and will be smaller the slower the stick movement is.
+            //  Cutoff frequency determines this action.
+            collectiveStickHPF = collectiveStickPercent - collectiveStickLPF;
+
+            // HF3D TODO:  Negative because of clockwise main rotor spin direction -> CCW body torque on helicopter
+            //   Implement a configuration parameter for rotor rotation direction
+            float tailCollectiveFF = -1.0f * collectiveStickPercent * pidProfile->yawColKf / 100.0f;
+            float tailCollectivePulseFF = -1.0f * collectiveStickHPF * pidProfile->yawColPulseKf / 100.0f;
+            float tailBaseThrust = -1.0f * pidProfile->yawBaseThrust / 10.0f;
+            
+            // HF3D TODO:  Add cyclic feedforward for yaw
+            // float tailCyclicFF = ...
+            
+            // Main motor torque increase from the ESC is proportional to the absolute change in average voltage (NOT percent change in average voltage)
+            //     and it is linear with the amount of change.
+            // Main motor torque will always cause the tail to rotate in in the same direction, so we just need to apply this offset in the correct direction to counter-act that torque.
+            // For CW rotation of the main rotor, the torque will turn the body of the helicopter CCW
             //   This means the leading edge of the tail blade needs to tip towards the left side of the helicopter to counteract it.
-            //   Right yaw stick = clockwise rotation = tip of tail blade to left = POSITIVE servo values
-            //   Right yaw stick = positive control channel PWM values from the TX also.
-            // //  Smix on my rudder channel is setup for -100... so it will take NEGATIVE values in the pidSum to create positive servo movement!
-            
-            //   So my collective comp also needs to make positive tail servo value... but need to check the smix for reversal first!!
-            //     But once it's done this time it will be correct for any other heli that's setup correctly, regardless of servo reversal
-            //     ... as long as it yaws the correct direction from the sticks.
-            
+            //   Yaw stick right = clockwise rotation = tip of tail blade to left = POSITIVE servo values observed on the X3
+            //      NOTE:  Servo values required to obtain a certain direction of change in the tail depends on which side the servo is mounted and if it's a leading or trailing link!!
+            //      It is very important to set the servo reversal configuration up correctly so the servo moves in the same direction as the Preview model!
+            //   Yaw stick right = positive control channel PWM values from the TX also.
+            //   Smix on my rudder channel is setup for -100... so it will take NEGATIVE values in the pidSum to create positive servo movement!
+
+            //   So my collective comp also needs to make positive tail servo values, which means that I need a NEGATIVE adder to the pidSum due to the channel rate reversal.
+            //     But, this should always work for all helis that are also setup correctly, regardless of servo reversal...
+            //     ... as long as it yaws the correct direction to match the Preview model.
+            //     ... and as long as the main motor rotation direction is CW!  CCW rotation will require reversing this and generating POSITIVE pidSum additions!
             // HF3D TODO:  Add a "main rotor rotation direction" configuration parameter.
             
-
             // HF3D TODO:  Consider adding a delay in here to allow time for other things to occur...
             //  Tail servo can probably add pitch faster than the swash servos can add collective pitch
-            //   and it's definitely faster than the ESC can add torque to the main motor (for gov impulse)
+            //   and it's also probably faster than the ESC can add torque to the main motor (for gov impulse)
             //  But for motor-driven tails the delay may not be needed... depending on how fast the ESC+motor
             //   can spin up the tail blades relative to the other pieces of the puzzle.
+            
+            // Add our collective feedforward terms into the yaw axis pidSum as long as we don't have a motor driven tail
+            if (getMotorCount() == 1) {
+                pidData[FD_YAW].Sum += tailCollectiveFF + tailCollectivePulseFF + tailBaseThrust;
+            }
+            // HF3D TODO:  Do some integration of the motor driven tail code here for motorCount == 2...
+            //   But have to be careful, because if main motor throttle goes near zero then we'll never get the tail back if we're
+            //   adding feedforward that doesn't need to be there.  We can't create negative thrust with a motor driven fixed pitch tail.
+                        
         }
-        
         
     }
 
@@ -1753,4 +1801,14 @@ float pidGetDT()
 float pidGetPidFrequency()
 {
     return pidFrequency;
+}
+
+float pidGetCollectiveStickPercent()
+{
+    return collectiveStickPercent;
+}
+
+float pidGetCollectiveStickHPF()
+{
+    return collectiveStickHPF;
 }

@@ -311,7 +311,7 @@ static FAST_RAM_ZERO_INIT float govCycKf;
 static FAST_RAM_ZERO_INIT float govColKf;
 static FAST_RAM_ZERO_INIT float govColPulseKf;
 static FAST_RAM_ZERO_INIT float govColPulseFc;
-static FAST_RAM_ZERO_INIT float govColPulseFilterGain;   // Used for governor failure
+static FAST_RAM_ZERO_INIT float govColPulseFilterGain;   
 static FAST_RAM_ZERO_INIT float govBaseThrottleFilterGain;   // Used for governor failure
 
 uint8_t getMotorCount(void)
@@ -387,7 +387,7 @@ void mixerInit(mixerMode_e mixerMode)
     // We're stealing the mmix throttle% section on motor 0 to be our ramp-up time instead. 
     // rampTime is how many seconds to go from 0rpm to 100% pwm output
     // mmix 1 throttle = 5.0 ==> 5 seconds to spool up from 0% to 100% throttle
-    //   activemixer.throttle = floating point value between 0-100
+    //   activemixer.throttle = floating point value between 0-1.00
     // targetPidLooptime is in units of microseconds...  (8kHz => targetPidLooptime = 125)
     //   5 seconds = @ 8kHz ==> 40,000 loops for full spool-up from 0% to 100%
     //rampRate = targetPidLooptime / (currentMixer[0].throttle * 1e6f);    
@@ -669,13 +669,13 @@ static void calculateThrottleAndCurrentMotorEndpoints(timeUs_t currentTimeUs)
 // HF3D TODO:  Move governor logic to separate source file
 static FAST_RAM_ZERO_INIT float lastSpoolThrottle = 0;
 static FAST_RAM_ZERO_INIT uint8_t spooledUp = 0;
-FAST_RAM_ZERO_INIT uint16_t governorSetpoint;
-FAST_RAM_ZERO_INIT float govBaseThrottle;
-FAST_RAM_ZERO_INIT float govPidSum = 0;
-FAST_RAM_ZERO_INIT float govI = 0;
-FAST_RAM_ZERO_INIT float collectiveStickLPF = 0;
-FAST_RAM_ZERO_INIT float govCollectiveFF = 0;
-FAST_RAM_ZERO_INIT float govCollectivePulseFF = 0;
+static FAST_RAM_ZERO_INIT float governorSetpoint;
+static FAST_RAM_ZERO_INIT float governorSetpointLimited = 0.0f;
+static FAST_RAM_ZERO_INIT float govBaseThrottle;
+static FAST_RAM_ZERO_INIT float govPidSum = 0;
+static FAST_RAM_ZERO_INIT float govI = 0;
+static FAST_RAM_ZERO_INIT float govCollectiveFF = 0;
+static FAST_RAM_ZERO_INIT float govCollectivePulseFF = 0;
 
 static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t *activeMixer)
 {
@@ -687,28 +687,48 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
     //     * If used, tail motor should have 100% yaw mixing
     //     * mmix 1 (tail motor) uses the Throttle% to determine tailMotorBaseThrustGain
     //     *    1.0 would be way too high.  Full tail thrust when head is at 100% rpm.
-    float mainMotorThrottle = 0.0f;        // Used by the tail code to set the base tail motor output as a fraction of main motor output
-    uint8_t collectiveStickPercent = 0;    // Will always be positive, range of 0-100
-    
+    float mainMotorThrottle = 0.0f;         // Used by the tail code to set the base tail motor output as a fraction of main motor output
+
     // Handle MAIN motor (motor[0]) throttle output & spool-up
     if (motorCount > 0) {
-        
-        // HF3D TODO:  Call governor code with the desired throttle setting for the main motor
-        //   Determine if it should be called before or after spool-up code...
-        //   Probably before since we want to know what the rcCommand was and not necessarily the scaled value
-        //   In fact... it would probably be best to just reference throttle into the governor from somewhere else in the future.
-    
-        // Determine governor setpoint
-        // HF3D TODO:  Check !isDshotMotorTelemetryActive(i) 
-        governorSetpoint = (throttle > 0.50) ? (throttle * (float)govMaxHeadspeed) : 0;
-        // HF3D TODO:  Rate limit governorSetpoint changes if we're already spooledUp.
-        
+
         // Calculate headspeed
         float mainMotorRPM = rpmGetFilteredMotorRPM(0);    // Get main motor rpm  --- what about calcESCrpm if DSHOT not available, but normal ESC telemetry is?
         float headspeed = mainMotorRPM / govGearRatio;
-        // Disable governor if main motor RPM is not available
-        if (headspeed == 0) {
+                
+        // Determine governor setpoint (use governor if throttle setting is >50%)
+        // HF3D TODO:  Check !isDshotMotorTelemetryActive(i)
+        if (throttle > 0.50) {
+
+            // Set the user requested governor headspeed setting
+            governorSetpoint = throttle * (float)govMaxHeadspeed;
+            
+            // If we don't have a non-zero rate limited setpoint yet, set it to the headspeed
+            if (governorSetpointLimited <= 0) {
+                governorSetpointLimited = headspeed;
+            }
+            
+            // Increment or decrement the rate limited governor setpoint if needed
+            // If ramp is set to 5s then this will allow 20% change in 1 second, or 10% headspeed in 0.5 seconds.
+            float govRampRate = rampRate * (float)govMaxHeadspeed;
+            if ((governorSetpoint - governorSetpointLimited) > govRampRate) {
+                // Setpoint is higher than the rate limited setpoint, so increment limited setpoint higher
+                governorSetpointLimited = constrainf(governorSetpointLimited + govRampRate, governorSetpointLimited, governorSetpoint);                
+            
+            } else if ((governorSetpointLimited - governorSetpoint) > govRampRate)  {
+                // Setpoint is lower than the rate limited setpoint, so decrement limited setpoint lower
+                governorSetpointLimited = constrainf(governorSetpointLimited - govRampRate, governorSetpoint, governorSetpointLimited);
+            }
+        } else {
+            // Throttle is less than 50%, don't use governor.
             governorSetpoint = 0;
+            governorSetpointLimited = 0;
+        }
+
+        if (headspeed == 0) {
+            // Disable governor if main motor RPM is not available
+            governorSetpoint = 0;
+            governorSetpointLimited = 0;
         }
     
         //----------------- Spoolup Logic ----------------
@@ -724,6 +744,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         //  This will prevent the "lag" that sometimes occurs where we end up ramping PWM into oblivion and then the ESC "catches up" later on.
         //  See 4/9/20 log #7
 
+        // Spool-up using governorSetpoint (not the rate limited GovernorSetpoint)
         // Determine spoolup status
         if (headspeed < 1000.0f) {
             // Require heli to spin up slowly if below 1000 rpm.
@@ -741,14 +762,17 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
             spooledUp = 1;
             // Set the governor's base throttle % to our last spooled throttle value
             govBaseThrottle = lastSpoolThrottle;
+            // Jump the rate limited Setpoint up to the setpoint.
+            governorSetpointLimited = governorSetpoint*0.97f;
         
         } else if (!spooledUp && governorSetpoint && (lastSpoolThrottle > 0.90f)) {
             // Governor is enabled, and we've hit 90% throttle trying to get within 97% the requested headspeed.
             // HF3D TODO:  Flag and alert user in the logs and/or with beep tones after flight that govMaxHeadspeed is set too high.
             spooledUp = 1;
             govBaseThrottle = lastSpoolThrottle;
+            governorSetpointLimited = headspeed;
         }
-        
+
         // Handle ramping of throttle
         // Skip spooling logic if no throttle signal or if we're disarmed
         if ((throttle == 0.0f) || !ARMING_FLAG(ARMED)) {
@@ -772,32 +796,16 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         // --------------- End of Spoolup Logic --------------
 
         // --------------- Feedforward Calculations ----------
-        // HF3D:  Quick and dirty collective pitch linear feed-forward for the main motor
-        //uint8_t collectiveStickPercent = 0;          // Will always be positive
-        if ((rcCommand[COLLECTIVE] >= 500) || (rcCommand[COLLECTIVE] <= -500)) {
-            collectiveStickPercent = 100;
-        } else {
-            // HF3D TODO:  Round instead of truncating.  Or just use float.
-            if (rcCommand[COLLECTIVE] >= 0) {
-                collectiveStickPercent = (rcCommand[COLLECTIVE] * 100) / (PWM_RANGE_MAX - rxConfig()->midrc);
-            } else if (rcCommand[COLLECTIVE] < 0) {
-                collectiveStickPercent = (rcCommand[COLLECTIVE] * -100) / (rxConfig()->midrc - PWM_RANGE_MIN);
-            }
-            // collectiveStickPercent = 0-100 integer value, always positive
-        }
+        
+        // Quick and dirty collective pitch linear feed-forward for the main motor
         // Calculate linear feedforward vs. collective stick position (always positive adder)
         //   Reasonable value would be 0.15 throttle addition for 12-degree collective throw..
         //   So gains in the 0.0015 - 0.0032 range depending on where max collective pitch is on the heli
         //   HF3D TODO:  Set this up so works off of a calibrated pitch value for the heli taken during setup
-        govCollectiveFF = govColKf * collectiveStickPercent;
+        govCollectiveFF = govColKf * pidGetCollectiveStickPercent();
         
-        // HF3D:  Collective pitch impulse feed-forward for the main motor
-        // Run our collectiveStickPercent through a low pass filter
-        collectiveStickLPF = collectiveStickLPF + govColPulseFilterGain * (collectiveStickPercent - collectiveStickLPF);
-        // Subtract LPF from the original value to get a high pass filter
-        float collectiveStickHPF = collectiveStickPercent - collectiveStickLPF;
-        // Calculate the feedforward result
-        govCollectivePulseFF = govColPulseKf * collectiveStickHPF;
+        // Collective pitch impulse feed-forward for the main motor
+        govCollectivePulseFF = govColPulseKf * pidGetCollectiveStickHPF();
 
         // HF3D TODO:  Add a cyclic stick feedforward to the governor - linear gain should be fine.
         // Additional torque is required from the motor when adding cyclic pitch, just like collective (although less)
@@ -806,16 +814,13 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         // --------------- End of Feedforward Calculations ---
 
         // --------------- Governor Logic --------------------
-        if (spooledUp && governorSetpoint) {
-            
-            // HF3D TODO:  Add collective pitch compensation feedforward
-            //  High-pass filter (original-lpf) * Kf
-            
+        if (spooledUp && governorSetpointLimited) {
+                
             // Calculate error as a percentage of the max headspeed, since 100% throttle should be close to max headspeed
             // HF3D TODO:  Do we really want the governor to respond the same even if setpoint is only 60% of max?
             //   100 rpm error on 60% of max would "feel" a lot different than 100 rpm error on 90% of max headspeed.
             //   But would it really require any torque differences for the same response??  Maybe, since less inertia in head?
-            float govError = (governorSetpoint - headspeed) / (float)govMaxHeadspeed;
+            float govError = (governorSetpointLimited - headspeed) / (float)govMaxHeadspeed;
             
             // if gov_p_gain = 10 (govKp = 1), we will get 1% change in throttle for 1% error in headspeed
             float govP = govKp * govError;
@@ -871,7 +876,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         mainMotorThrottle = throttle;        // Used by the tail motor code to set the base tail motor output as a fraction of main motor output
 
         // HF3D TODO:  Rename debug_smartaudio entry eventually
-        DEBUG_SET(DEBUG_SMARTAUDIO, 0, governorSetpoint);
+        DEBUG_SET(DEBUG_SMARTAUDIO, 0, governorSetpointLimited);
         DEBUG_SET(DEBUG_SMARTAUDIO, 1, headspeed);
         //DEBUG_SET(DEBUG_SMARTAUDIO, 2, govPidSum*1000.0f);             // Max pidsum will be around 1, so increase by 1000x
         DEBUG_SET(DEBUG_SMARTAUDIO, 3, rpmGetFilteredMotorRPM(1));  // Tail motor RPM
@@ -918,12 +923,20 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         // motorMix for tail motor should be 100% stabilized yaw channel
         float motorOutput = motorOutputMixSign * motorMix[1];
         
+        // HF3D TODO:  Yaw base thrust is now a setting in pid.c
+        //  For a tail motor.. we don't really want it spinning like crazy anytime we're armed,
+        //   so tone the motorOutput down a bit using the mainMotorThrottle as a gain until 
+        //   we're at half our throttle setting or something.
+        
+        
         // Linearize the tail motor thrust  (pidApplyThrustLinearization)
 #ifdef USE_THRUST_LINEARIZATION
         // Scale PID sums and throttle to linearize the system (thrust varies with rpm^2)
         //   https://github.com/betaflight/betaflight/pull/7304
         motorOutput = pidApplyThrustLinearization(motorOutput);
 #endif
+
+
 
         // Add in base tail motor thrust to compensate for the main shaft torque
         // Base thrust should vary with main motor RPM^2, but our tail motor also has thrust^2, so increase in base thrust will be linear
@@ -952,7 +965,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
             //    1x normal tail motor base thrust at hover collective
             // 100% collectiveStickPercent is very high collective pitch, so LOTS of thrust and corresponding main shaft torque
             //    2x normal tail motor base thrust
-            float collectivePrecomp = 0.02321083f + 0.05059961f*collectiveStickPercent - 0.0002088975f*collectiveStickPercent*collectiveStickPercent;
+            float collectivePrecomp = 0.02321083f + 0.05059961f*pidGetCollectiveStickPercent() - 0.0002088975f*pidGetCollectiveStickPercent()*pidGetCollectiveStickPercent();
             //float collectivePrecomp = collectiveStickPercent / 100.0f * 3.0f;
             // Precomp is linear since collective changes give a linear change in thrust, but tail motor thrust is exponential due to rpm response
             //   Linearize the collectivePrecomp value for the tail motor commands
@@ -1089,6 +1102,10 @@ FAST_CODE_NOINLINE void mixTable(timeUs_t currentTimeUs, uint8_t vbatPidCompensa
     }
 #endif // USE_YAW_SPIN_RECOVERY
 
+    // PID_MIXER_SCALING = 1000.0f
+    // Default yawPidSumLimit = 400
+    //  So scaledAxisPidYaw maxxes out at +/- 0.4 if yawPidSumLimit is left at 400... probably not good for a motor driven tail
+    //  because the motor output is actually +/- 1.0f, but values below 0 won't actually do anything since the tail motor will be stopped.
     float scaledAxisPidYaw =
         constrainf(pidData[FD_YAW].Sum, -yawPidSumLimit, yawPidSumLimit) / PID_MIXER_SCALING;
 
@@ -1215,17 +1232,12 @@ uint8_t isHeliSpooledUp(void)
     return spooledUp;
 }
 
-float mixerGetGovCollectiveFF(void)
-{
-    return govCollectiveFF;
-}
-
-float mixerGetGovCollectivePulseFF(void)
-{
-    return govCollectivePulseFF;
-}
-
 float mixerGetGovGearRatio(void)
 {
     return govGearRatio;
+}
+
+float mixerGetGovCollectivePulseFilterGain(void)
+{
+    return govColPulseFilterGain;
 }

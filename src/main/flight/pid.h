@@ -180,6 +180,13 @@ typedef struct pidProfile_s {
     uint8_t ff_max_rate_limit;              // Maximum setpoint rate percentage for FF
     uint8_t ff_spike_limit;                 // FF stick extrapolation lookahead period in ms
     uint8_t ff_smooth_factor;               // Amount of smoothing for interpolated FF steps
+    
+    // HF3D parameters
+    uint16_t yawColKf;                      // Feedforward for collective into Yaw
+    uint16_t yawColPulseKf;                 // Feedforward for collective impulse into Yaw
+    uint16_t yawCycKf;                      // Feedforward for cyclic into Yaw
+    uint16_t yawBaseThrust;                 // Base thrust for the tail
+    uint16_t rescue_collective;             // Collective pitch command when rescue is fully upright
 } pidProfile_t;
 
 PG_DECLARE_ARRAY(pidProfile_t, PID_PROFILE_COUNT, pidProfiles);
@@ -258,3 +265,6 @@ float pidGetPidFrequency();
 float pidGetFfBoostFactor();
 float pidGetFfSmoothFactor();
 float pidGetSpikeLimitInverse();
+// HF3D
+float pidGetCollectiveStickPercent();
+float pidGetCollectiveStickHPF();
