@@ -1600,32 +1600,8 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
         } else {
             pidData[axis].F = 0;
         }
-
-#ifdef USE_YAW_SPIN_RECOVERY
-        if (yawSpinActive) {
-            pidData[axis].I = 0;  // in yaw spin always disable I
-            if (axis <= FD_PITCH)  {
-                // zero PIDs on pitch and roll leaving yaw P to correct spin 
-                pidData[axis].P = 0;
-                pidData[axis].D = 0;
-                pidData[axis].F = 0;
-            }
-        }
-#endif // USE_YAW_SPIN_RECOVERY
-
-        // calculating the PID sum
-        const float pidSum = pidData[axis].P + pidData[axis].I + pidData[axis].D + pidData[axis].F;
-#ifdef USE_INTEGRATED_YAW_CONTROL
-        if (axis == FD_YAW && useIntegratedYaw) {
-            pidData[axis].Sum += pidSum * dT * 100.0f;
-            pidData[axis].Sum -= pidData[axis].Sum * integratedYawRelax / 100000.0f * dT / 0.000125f;
-        } else
-#endif
-        {
-            pidData[axis].Sum = pidSum;
-        }
         
-        // HF3D:  Calculate tail feedforward precompensation and add it to the pidSum on the Yaw channel
+         // HF3D:  Calculate tail feedforward precompensation and add it to the pidSum on the Yaw channel
         if (axis == FD_YAW) {
             
             // Calculate absolute value of the percentage of collective stick throw
@@ -1682,12 +1658,36 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
             
             // Add our collective feedforward terms into the yaw axis pidSum as long as we don't have a motor driven tail
             if (getMotorCount() == 1) {
-                pidData[FD_YAW].Sum += tailCollectiveFF + tailCollectivePulseFF + tailBaseThrust;
+                pidData[FD_YAW].F += tailCollectiveFF + tailCollectivePulseFF + tailBaseThrust;
             }
             // HF3D TODO:  Do some integration of the motor driven tail code here for motorCount == 2...
             //   But have to be careful, because if main motor throttle goes near zero then we'll never get the tail back if we're
             //   adding feedforward that doesn't need to be there.  We can't create negative thrust with a motor driven fixed pitch tail.
                         
+        }       
+
+#ifdef USE_YAW_SPIN_RECOVERY
+        if (yawSpinActive) {
+            pidData[axis].I = 0;  // in yaw spin always disable I
+            if (axis <= FD_PITCH)  {
+                // zero PIDs on pitch and roll leaving yaw P to correct spin 
+                pidData[axis].P = 0;
+                pidData[axis].D = 0;
+                pidData[axis].F = 0;
+            }
+        }
+#endif // USE_YAW_SPIN_RECOVERY
+
+        // calculating the PID sum
+        const float pidSum = pidData[axis].P + pidData[axis].I + pidData[axis].D + pidData[axis].F;
+#ifdef USE_INTEGRATED_YAW_CONTROL
+        if (axis == FD_YAW && useIntegratedYaw) {
+            pidData[axis].Sum += pidSum * dT * 100.0f;
+            pidData[axis].Sum -= pidData[axis].Sum * integratedYawRelax / 100000.0f * dT / 0.000125f;
+        } else
+#endif
+        {
+            pidData[axis].Sum = pidSum;
         }
         
     }
