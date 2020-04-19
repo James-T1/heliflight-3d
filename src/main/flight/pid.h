@@ -268,3 +268,4 @@ float pidGetSpikeLimitInverse();
 // HF3D
 float pidGetCollectiveStickPercent();
 float pidGetCollectiveStickHPF();
+uint16_t pidGetRescueCollectiveSetting();

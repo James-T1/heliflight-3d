@@ -755,7 +755,12 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
             // If user spools up above 1000rpm, then lowers throttle below the last spool target, allow the heli to be considered spooled up
             spooledUp = 1;
             lastSpoolThrottle = throttle;        // Allow spool target to reduce with throttle freely even if already spooledUp.
-
+            // HF3D TODO:  There's a bug with this block....
+            //   If you spool up above 1000 and then come back below that throttle setting (normal mode)
+            //   lastSpoolThrottle will ONLY go down since that's all it's allowed to do here.
+            //   Then when the governor turns on it gets this really low lastSpoolThrottle value (maybe even zero)
+            //      and then throttle drops to zero and the i-term has to wind up the entire amount.
+            
         } else if (!spooledUp && governorSetpoint && (headspeed > governorSetpoint*0.97)) {
             // Governor is enabled, running on headspeed
             // If headspeed is within 3% of governorSetpoint, consider the heli to be spooled up
