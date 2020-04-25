@@ -96,7 +96,7 @@ int16_t servo[MAX_SUPPORTED_SERVOS];
 static uint8_t servoRuleCount = 0;
 static servoMixer_t currentServoMixer[MAX_SERVO_RULES];
 static int useServo;
-
+int servo_override[MAX_SUPPORTED_SERVOS];
 
 #define COUNT_SERVO_RULES(rules) (sizeof(rules) / sizeof(servoMixer_t))
 // mixer rule format servo, input, rate, speed, min, max, box
@@ -220,6 +220,11 @@ int servoDirection(int servoIndex, int inputSource)
 
 void servosInit(void)
 {
+    // Reset servo position override
+    for (int i = 0; i < MAX_SUPPORTED_SERVOS; i++) {
+        servo_override[i] = 2001;
+    }
+    
     // enable servos for mixes that require them. note, this shifts motor counts.
     useServo = mixers[getMixerMode()].useServo;
     // if we want camstab/trig, that also enables servos, even if mixer doesn't
@@ -563,6 +568,15 @@ static void servoTable(void)
         }
     }
 
+    // override servo position if user asked us to (via CLI or MSP/Configurator)
+    if (!ARMING_FLAG(ARMED)) {
+        for (int i = 0; i < MAX_SUPPORTED_SERVOS; i++) {
+            if (servo_override[i] < 2000) {
+                servo[i] = servo_override[i] + determineServoMiddleOrForwardFromChannel(i);
+            }          
+        }
+    }
+    
     // constrain servos
     //   default min = 1000, max = 2000
     for (int i = 0; i < MAX_SUPPORTED_SERVOS; i++) {

@@ -3099,6 +3099,21 @@ static int parseOutputIndex(char *pch, bool allowAllEscs) {
     return outputIndex;
 }
 
+static int parseServoOverrideIndex(char *pch, bool allowAllServos) {
+    int outputIndex = atoi(pch);
+    if ((outputIndex >= 0) && (outputIndex < MAX_SUPPORTED_SERVOS)) {
+        cliPrintLinef("Using servo output %d.", outputIndex);
+    } else if (allowAllServos && outputIndex == ALL_MOTORS) {
+        cliPrintLinef("Using all servo outputs.");
+    } else {
+        cliPrintErrorLinef("INVALID SERVO NUMBER. RANGE: 0 - %d.", MAX_SUPPORTED_SERVOS - 1);
+
+        return -1;
+    }
+
+    return outputIndex;
+}
+
 #if defined(USE_DSHOT)
 #if defined(USE_ESC_SENSOR) && defined(USE_ESC_SENSOR_INFO)
 
@@ -3511,6 +3526,69 @@ static void cliMotor(char *cmdline)
         }
     } else {
         cliShowParseError();
+    }
+}
+
+static void cliServoPosition(char *cmdline)
+{
+    if (isEmpty(cmdline)) {
+        cliShowParseError();
+
+        return;
+    }
+
+    int servoIndex = 0;
+    int servoValue = -2000;
+
+    char *saveptr;
+    char *pch = strtok_r(cmdline, " ", &saveptr);
+    int index = 0;
+    while (pch != NULL) {
+        switch (index) {
+        case 0:
+            servoIndex = parseServoOverrideIndex(pch, true);
+            if (servoIndex == -1) {
+                return;
+            }
+
+            break;
+        case 1:
+            servoValue = atoi(pch);
+
+            break;
+        }
+        index++;
+        pch = strtok_r(NULL, " ", &saveptr);
+    }
+
+    if (index == 2) {
+        if (servoValue < -1000 || servoValue > 2001) {
+            cliShowArgumentRangeError("VALUE", -1000, 2001);
+        } else {
+            int servoOutputValue = servoValue;
+
+            if (servoIndex != ALL_MOTORS) {
+                servo_override[servoIndex] = servoOutputValue;
+
+                cliPrintLinef("servo %d override set to: %d", servoIndex, servoOutputValue);
+            } else  {
+                for (int i = 0; i < MAX_SUPPORTED_SERVOS; i++) {
+                    servo_override[i] = servoOutputValue;
+                }
+
+                cliPrintLinef("all servos override set to: %d", servoOutputValue);
+            }
+        }
+    } else {
+        // Print out the current servo position if no position given (255 = all servos print)
+        if (servoIndex != ALL_MOTORS) {
+            cliPrintLinef("Servo override setting for servo %d: %d", servoIndex, servo_override[servoIndex]);
+        } else  {
+            for (int i = 0; i < MAX_SUPPORTED_SERVOS; i++) {
+                cliPrintLinef("Servo override setting for servo %d: %d", i, servo_override[i]);
+            }
+        }
+        //cliShowParseError();
     }
 }
 
@@ -5863,6 +5941,7 @@ const clicmd_t cmdTable[] = {
 #endif
 #ifdef USE_SERVOS
     CLI_COMMAND_DEF("servo", "configure servos", NULL, cliServo),
+    CLI_COMMAND_DEF("servo_position",  "get/set servo position", "<index> [<value>]", cliServoPosition),
 #endif
     CLI_COMMAND_DEF("set", "change setting", "[<name>=<value>]", cliSet),
 #if defined(USE_SIGNATURE)
