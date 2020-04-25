@@ -945,11 +945,12 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         // motorMix for tail motor should be 100% stabilized yaw channel
         float motorOutput = motorOutputMixSign * motorMix[1];
         
-        // HF3D TODO:  Yaw base thrust is now a setting in pid.c
-        //  For a tail motor.. we don't really want it spinning like crazy anytime we're armed,
-        //   so tone the motorOutput down a bit using the mainMotorThrottle as a gain until 
-        //   we're at half our throttle setting or something.
-        
+        //  For a tail motor.. we don't really want it spinning like crazy from base thrust anytime we're armed,
+        //   so tone the motorOutput down a bit using the mainMotorThrottle as a gain until we're at half our throttle setting or something.
+        if (!spooledUp) {
+            // Track the main motor output while spooling up so that we don't have our tail motor going nuts at zero throttle
+            motorOutput = mainMotorThrottle * motorOutput;
+        }
         
         // Linearize the tail motor thrust  (pidApplyThrustLinearization)
 #ifdef USE_THRUST_LINEARIZATION
@@ -958,44 +959,10 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         motorOutput = pidApplyThrustLinearization(motorOutput);
 #endif
 
-
-
-        // Add in base tail motor thrust to compensate for the main shaft torque
+        // Just using the base thrust from the PID controller now.  Eventually need to revisit this.
         // Base thrust should vary with main motor RPM^2, but our tail motor also has thrust^2, so increase in base thrust will be linear
         //   Divider should be the maximum headspeed the heli can achieve
-        // HF3D TODO:  Add divider RPM to the user configuration.... or at least just use the "max governed RPM" value that will be used for a governor.
-        float tailMotorBaseThrustGain = activeMixer[1].throttle;            // HF3D TODO:  Move configuration value to a new configuration parameter
-        float tailMotorBaseThrust = 0.0f;
-        if (mainMotorThrottle < 0.4f) {
-            tailMotorBaseThrust = (mainMotorThrottle * tailMotorBaseThrustGain);   // Track the main motor output while spooling up (looks cool for them to both spool up at once)
-        } else {
-            tailMotorBaseThrust = (0.4f * tailMotorBaseThrustGain);                // Set fixed base thrust since lower headspeeds actually require higher base thrust.  Not sure what to think about doing here.
-            //  Base thrust probably needs to be "load" based.... so feed-forward that takes into account the blade pitch, rpms, etc.
-            //  Even then, the relative velocity of the heli through the air will change the loading at the same blade pitch.
-            //  Maybe if we had instantaneous motor power telemetry available (watts) we could calculate instantaneous motor torque from watts and RPMs.
-            //    This would give us a nearly perfect estimator of how much tail thrust is needed to counteract the motor shaft torque?
-            //    Which would make one heck of a cool feedforward compensator...
-        }
-        
-        // HF3D:  Quick and dirty collective pitch pre-compensation for the tail motor
-        // HF3D TODO:  Just have this piggy-back on the feedforward values going into the governor.
-        // Only perform collectivePrecompensation on the tail if the main motor is running
-        if (mainMotorThrottle > 0.0f) {
-            // Zero collectiveStickPercent is zero collective pitch, so very little main shaft torque
-            //    0x normal tail motor base thrust
-            // Hover collectiveStickPercent is a few degrees of collective pitch, so 1x multiplier
-            //    1x normal tail motor base thrust at hover collective
-            // 100% collectiveStickPercent is very high collective pitch, so LOTS of thrust and corresponding main shaft torque
-            //    2x normal tail motor base thrust
-            float collectivePrecomp = 0.02321083f + 0.05059961f*pidGetCollectiveStickPercent() - 0.0002088975f*pidGetCollectiveStickPercent()*pidGetCollectiveStickPercent();
-            //float collectivePrecomp = collectiveStickPercent / 100.0f * 3.0f;
-            // Precomp is linear since collective changes give a linear change in thrust, but tail motor thrust is exponential due to rpm response
-            //   Linearize the collectivePrecomp value for the tail motor commands
-            collectivePrecomp = pidApplyThrustLinearization(collectivePrecomp);
-            tailMotorBaseThrust *= collectivePrecomp;
-        }
-        
-        motorOutput += tailMotorBaseThrust;
+        //   Tail motor thrust needs to track main motor torque.  On a non-motor tail the tail RPM tracks the main motor RPM by default.
         
         //motorOutput += (mainMotorThrottle * tailMotorBaseThrustGain);       // Probably something like 0.2 would be a good setting for this?  Just a guess.
         //  ^^ Actually, I think this is a bad idea.  Base tail thrust will actually need to INCREASE for lower headspeeds.  Lower mainshaft rpm with some power input = more torque necessary.
