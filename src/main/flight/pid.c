@@ -862,7 +862,7 @@ STATIC_UNIT_TESTED float pidLevel(int axis, const pidProfile_t *pidProfile, cons
         // Angle mode is now rescue mode.
         float errorAngle = 0.0f;
 
-        // -90 Pitch is straight up and +909 is straight down
+        // -90 Pitch is straight up and +90 is straight down
         // We are always pitching to "zero" whether up-right or inverted
         //   but the control direction needed to get to up-right is different than inverted
         // Determine if we're closer to up-right or inverted by checking for abs(roll attitude) > 90

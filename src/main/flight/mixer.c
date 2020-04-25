@@ -676,6 +676,7 @@ static FAST_RAM_ZERO_INIT float govPidSum = 0;
 static FAST_RAM_ZERO_INIT float govI = 0;
 static FAST_RAM_ZERO_INIT float govCollectiveFF = 0;
 static FAST_RAM_ZERO_INIT float govCollectivePulseFF = 0;
+static FAST_RAM_ZERO_INIT timeMs_t lastSpoolEndTime = 0;
 
 static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t *activeMixer)
 {
@@ -696,6 +697,15 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         float mainMotorRPM = rpmGetFilteredMotorRPM(0);    // Get main motor rpm  --- what about calcESCrpm if DSHOT not available, but normal ESC telemetry is?
         float headspeed = mainMotorRPM / govGearRatio;
                 
+        // Some logic to help us come back from a stage 1 failsafe / glitch / RPM loss / accidental throttle hold quickly
+        // We're going to use this time to lock in our spooledUp state for a few seconds after throttle = 0 when we were just spooledUp on the last pass through
+        // Also gives us a few second window if we lose headspeed signal... in that case we'll fall back to the commanded throttle value
+        if (spooledUp && (throttle == 0.0f || headspeed < 1000.0f) && cmp32(millis(), lastSpoolEndTime) > 5500) {
+            // Time check above must be set just a little longer than any of the lastSpoolEndTime checks below.
+            // HF3D TODO:  Maybe change the throttle check above to something >0.0f or add some more logic to allow for a faster ramp for autorotation bailout of some kind?
+            lastSpoolEndTime = millis();
+        }
+                
         // Determine governor setpoint (use governor if throttle setting is >50%)
         // HF3D TODO:  Check !isDshotMotorTelemetryActive(i)
         if (throttle > 0.50) {
@@ -711,6 +721,11 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
             // Increment or decrement the rate limited governor setpoint if needed
             // If ramp is set to 5s then this will allow 20% change in 1 second, or 10% headspeed in 0.5 seconds.
             float govRampRate = rampRate * (float)govMaxHeadspeed;
+            // Check to see if we've been spooledUp recently .  If so, increase our govRampRate greatly to help recover from temporary loss of throttle signal.
+            // HF3D TODO:  If someone immediately plugged in their heli, armed, and took off throttle hold we could accidentally hit this fast governor ramp.  That would be crazy... but possible I guess?
+            if ( spooledUp && cmp32(millis(), lastSpoolEndTime) < 5000 ) {
+                govRampRate *= 7.0f;
+            }
             if ((governorSetpoint - governorSetpointLimited) > govRampRate) {
                 // Setpoint is higher than the rate limited setpoint, so increment limited setpoint higher
                 governorSetpointLimited = constrainf(governorSetpointLimited + govRampRate, governorSetpointLimited, governorSetpoint);                
@@ -746,8 +761,8 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
 
         // Spool-up using governorSetpoint (not the rate limited GovernorSetpoint)
         // Determine spoolup status
-        if (headspeed < 1000.0f) {
-            // Require heli to spin up slowly if below 1000 rpm.
+        if (headspeed < 1000.0f && cmp32(millis(), lastSpoolEndTime) > 3000) {
+            // Require heli to spin up slowly if it's been more than 3 seconds since we last had a headspeed below 1000 rpm
             spooledUp = 0;
 
         } else if (!governorSetpoint && throttle <= lastSpoolThrottle) {
@@ -779,6 +794,8 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         }
 
         // Handle ramping of throttle
+        // HF3D TODO:  Eventually add a "govEnabled" user setting flag.  If the user doesn't have the governor enabled then we need to not use headspeed to perform our spooledUp check.
+        //   Right now we have governor enabled all of of the time, but eventually the code needs to support running with or without an RPM signal (gov or no gov)
         // Skip spooling logic if no throttle signal or if we're disarmed
         if ((throttle == 0.0f) || !ARMING_FLAG(ARMED)) {
             // Don't reset spooledUp flag because we want throttle to respond quickly if user drops throttle in normal mode or re-arms while blades are still spinning > 1000rpm
@@ -799,7 +816,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         
         }
         // --------------- End of Spoolup Logic --------------
-
+        
         // --------------- Feedforward Calculations ----------
         
         // Quick and dirty collective pitch linear feed-forward for the main motor
