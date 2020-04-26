@@ -1136,6 +1136,7 @@ STATIC_UNIT_TESTED void rotateItermAndAxisError()
         const float gyroToAngle = dT * RAD;
         float rotationRads[XYZ_AXIS_COUNT];
         for (int i = FD_ROLL; i <= FD_YAW; i++) {
+            // convert the deg/s rotation rate sensed by the gyro into the total radians of angle change during the last time step
             rotationRads[i] = gyro.gyroADCf[i] * gyroToAngle;
         }
 #if defined(USE_ABSOLUTE_CONTROL)
@@ -1214,6 +1215,8 @@ STATIC_UNIT_TESTED void applyAbsoluteControl(const int axis, const float gyroRat
         //      So, no stick movement = no window.  The window collapses to just the commanded rate on that axis.
         //   Fast stick movement ==>  Lpf = smoothed command rate, 1>Hpf>0
         // Note:  Commanded rate could also be a result of self-leveling or other modes
+        // If roll rate sensed by Gyro is inside a window around the user's commanded setpoint, 
+        //   then we'll accumulate the full error.
         const float gmaxac = setpointLpf + 2 * setpointHpf;
         const float gminac = setpointLpf - 2 * setpointHpf;
         // Check to see if the roll rate sensed by the gyro is within the window of roll rates we created
@@ -1231,14 +1234,14 @@ STATIC_UNIT_TESTED void applyAbsoluteControl(const int axis, const float gyroRat
                 acErrorRate = -axisError[axis] * pidFrequency;
             }
         } else {
-            // Roll rate sensed by gyro was outside of the window
+            // Roll rate sensed by gyro was outside of the window around the user's commanded Setpoint
             // Set the absolute control error rate to the maximum or minimum edges of the window and subtract the actual gyro rate
             // If no change in stick position, then this will simply be rcCommandRate - gyroRate   (so just the angle rate error)
             acErrorRate = (gyroRate > gmaxac ? gmaxac : gminac ) - gyroRate;
         }
 
         // Check to ensure we are spooled up at a reasonable level
-        if (isAirmodeActivated()) {
+        if (isHeliSpooledUp()) {
             // Integrate the angle rate error, which gives us the accumulated angle error for this axis
             //  Limit the total angle error to the range defined by pidProfile->abs_control_error_limit
             axisError[axis] = constrainf(axisError[axis] + acErrorRate * dT,
