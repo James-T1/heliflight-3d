@@ -403,6 +403,8 @@ void writeServos(void)
     }
 }
 
+int32_t swashRingTotal = 0;
+
 // Generic servo mixing from Cleanflight using user-defined smix values for each servo
 void servoMixer(void)
 {
@@ -464,7 +466,7 @@ void servoMixer(void)
     //   Default pidSum limit = 500 * 0.7 scale factor = 350 for each of roll and pitch
     //   Combined output for both axis = sqrt(350^2+350^2) = 495 for the maximum roll+pitch command from the pid loop.  
     //   Divide each by the combined total to scale them down such that the total combined cyclic command equals the max in one axis.
-    const int32_t swashRingTotal = sqrt(input[INPUT_STABILIZED_ROLL]*input[INPUT_STABILIZED_ROLL] + input[INPUT_STABILIZED_PITCH]*input[INPUT_STABILIZED_PITCH]);
+    swashRingTotal = sqrt(input[INPUT_STABILIZED_ROLL]*input[INPUT_STABILIZED_ROLL] + input[INPUT_STABILIZED_PITCH]*input[INPUT_STABILIZED_PITCH]);
     
     // Check if swashRingTotal combination exceeds the maximum possible deflection in any one direction
     // HF3D TODO:  Be very cautious of increasing PID_SERVO_MIXER_SCALING in the future code!!  
@@ -617,3 +619,12 @@ static void filterServos(void)
 #endif
 }
 #endif // USE_SERVOS
+
+float servosGetSwashRingValue(void)
+{
+	if (swashRingTotal > (currentPidProfile->pidSumLimit * PID_SERVO_MIXER_SCALING)) {
+		return 1.0;
+    } else {
+		return ( (float) swashRingTotal / (PID_SERVO_MIXER_SCALING * currentPidProfile->pidSumLimit) );
+	}
+}

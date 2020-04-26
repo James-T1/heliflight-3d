@@ -149,3 +149,5 @@ void servoMixer(void);
 void servosTricopterInit(void);
 void servosTricopterMixer(void);
 bool servosTricopterIsEnabledServoUnarmed(void);
+// HF3D
+float servosGetSwashRingValue(void);
