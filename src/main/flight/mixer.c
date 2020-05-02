@@ -138,7 +138,7 @@ static const motorMixer_t mixerY4[] = {
 };
 
 
-#if (MAX_SUPPORTED_MOTORS >= 6)
+#if defined(USE_UNCOMMON_MIXERS) && (MAX_SUPPORTED_MOTORS >= 6)
 static const motorMixer_t mixerHex6X[] = {
     { 1.0f, -0.5f,  0.866025f,  1.0f },     // REAR_R
     { 1.0f, -0.5f, -0.866025f,  1.0f },     // FRONT_R
@@ -148,7 +148,6 @@ static const motorMixer_t mixerHex6X[] = {
     { 1.0f,  1.0f,  0.0f,       1.0f },     // LEFT
 };
 
-#if defined(USE_UNCOMMON_MIXERS)
 static const motorMixer_t mixerHex6H[] = {
     { 1.0f, -1.0f,  1.0f, -1.0f },     // REAR_R
     { 1.0f, -1.0f, -1.0f,  1.0f },     // FRONT_R
@@ -178,8 +177,6 @@ static const motorMixer_t mixerY6[] = {
 #define mixerHex6H NULL
 #define mixerHex6P NULL
 #define mixerY6 NULL
-#endif // USE_UNCOMMON_MIXERS
-#else
 #define mixerHex6X NULL
 #endif // MAX_SUPPORTED_MOTORS >= 6
 

@@ -34,6 +34,7 @@ typedef struct rpmFilterConfig_s
     uint16_t dterm_rpm_notch_q;          // q of the notches
 
     uint16_t rpm_lpf;                    // the cutoff of the lpf on reported motor rpm
+    uint16_t rpm_tail_gear_ratio;        // HF3D:  Tail gear drive ratio from the mainshaft * 100
 } rpmFilterConfig_t;
 
 PG_DECLARE(rpmFilterConfig_t, rpmFilterConfig);

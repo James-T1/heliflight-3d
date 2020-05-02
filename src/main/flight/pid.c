@@ -1188,6 +1188,7 @@ float FAST_CODE applyRcSmoothingDerivativeFilter(int axis, float pidSetpointDelt
 
 
 //  YOU SHOULD NOT ENABLE ABSOLUTE CONTROL AND ITERM ROTATION AT THE SAME TIME!
+//    HF3D TODO:  At least not until I make them compatible with each other.  :)
 //  Absolute Control needs to be used with iTermRelax to avoid bounce-backs due to the latency between stick movement and quad response.
 //    iTermRelax will then suspend AbsoluteControl error accumulation as well during quick moves.  Finally, AbsoluteControl only kicks in
 //    once the throttle minimum for airmode activation is exceeded to avoid undue corrections on the ground.
@@ -1196,9 +1197,6 @@ float FAST_CODE applyRcSmoothingDerivativeFilter(int axis, float pidSetpointDelt
 //     system, and mixes a correction proportional to that error into the setpoint.  It's as if you noticed every tiny attitude 
 //     error the quad incurs and provided an instantaneous correction on your TX.  The result is significantly better tracking
 //     to sticks, particularly during rotations involving yaw and other difficult situations like throttle blips.
-//  Absolute Control will likely eventually replace iterm_rotation, but it is not yet enabled by default.
-// HF3D TODO:  Evaluate applicability of Absolute Control to helicopters.  I think it will work, potentially with lower cutoff frequency for commanded rate.
-// HF3D TODO:  Change from activation based on airmode to activation based on spoolup state to enable helicopter use of Absolute Control
 #if defined(USE_ITERM_RELAX)
 #if defined(USE_ABSOLUTE_CONTROL)
 STATIC_UNIT_TESTED void applyAbsoluteControl(const int axis, const float gyroRate, float *currentPidSetpoint, float *itermErrorRate)
@@ -1209,6 +1207,10 @@ STATIC_UNIT_TESTED void applyAbsoluteControl(const int axis, const float gyroRat
         // Create high-pass filter by subtracting the commanded roll rate from the low-pass filtered version of itself
         const float setpointHpf = fabsf(*currentPidSetpoint - setpointLpf);
         float acErrorRate = 0;
+        
+        // NOTE:  This function runs on EACH AXIS INDEPENDENTLY.
+        //   Even though one axis may have a fast stick movement, the other two axes may not.
+        //   The other two axes will have full absolute control correction applied to them.
         
         // Create window around the low-pass filtered signal value
         //   No change in stick position ==> Lpf = commanded rate, Hpf = 0

@@ -44,17 +44,25 @@
 
 #include "rpm_filter.h"
 
-#define RPM_FILTER_MAXHARMONICS 3
+// HF3D:  Increasing MAXHARMONICS from 3 to 12 took ITCM_RAM from 15,472B @ 94.43% used to 17,680B @ 107.91% used.
+// Reducing from 12 to 9 took it down to 16,944B with 103.42% used
+// Reducing MAX_SUPPORTED_MOTORS from 8 to 4 with MAXHARMONICS = 9 took it to... almost no difference.  Which was surprising.
+// Reducing MAX_SUPPORTED_MOTORS to 2 took it to 16,792B @ 102.49%
+// Changing MAX_SUPPORTED_MOTORS to 4 and decreasing harmonics to 6 took it down to 16,200B @ 98.88% used
+// Changing MAX_SUPPORTED_MOTORS to 2 and decreasing harmonics to 6 took it down to 16,048B @ 97.95% used
+// Changing MAX_SUPPORTED_MOTORS to 4 and decreasing harmonics to 1 took it down to 14,952B @ 91.26% used
+// MUST CHANGE gyro_rpm_notch_harmonics and dterm_rpm_notch_harmonics max limits in settings.c when this value is changed!
+#define RPM_FILTER_MAXHARMONICS 6
 #define SECONDS_PER_MINUTE      60.0f
 #define ERPM_PER_LSB            100.0f
 #define MIN_UPDATE_T            0.001f
-
 
 static pt1Filter_t rpmFilters[MAX_SUPPORTED_MOTORS];
 
 typedef struct rpmNotchFilter_s
 {
     uint8_t harmonics;
+    uint8_t harmonicsPerFreq;
     float   minHz;
     float   maxHz;
     float   q;
@@ -65,6 +73,7 @@ typedef struct rpmNotchFilter_s
 
 FAST_RAM_ZERO_INIT static float   erpmToHz;      // HF3D TODO:  Change erpmToHz to array to allow for 2 different motors (main and tail)
 FAST_RAM_ZERO_INIT static float   erpmToHz1;     // HF3D TODO:  Change erpmToHz to array to allow for 2 different motors (main and tail)
+FAST_RAM_ZERO_INIT static float   tailGearRatio; // HF3D
 FAST_RAM_ZERO_INIT static float   filteredMotorErpm[MAX_SUPPORTED_MOTORS];
 FAST_RAM_ZERO_INIT static float   minMotorFrequency;
 FAST_RAM_ZERO_INIT static uint8_t numberFilters;
@@ -81,12 +90,11 @@ FAST_RAM_ZERO_INIT static uint8_t currentFilterNumber;
 FAST_RAM static rpmNotchFilter_t* currentFilter = &filters[0];
 
 
-
 PG_REGISTER_WITH_RESET_FN(rpmFilterConfig_t, rpmFilterConfig, PG_RPM_FILTER_CONFIG, 3);
 
 void pgResetFn_rpmFilterConfig(rpmFilterConfig_t *config)
 {
-    config->gyro_rpm_notch_harmonics = 3;
+    config->gyro_rpm_notch_harmonics = 2;
     config->gyro_rpm_notch_min = 25;
     config->gyro_rpm_notch_q = 500;
 
@@ -94,21 +102,49 @@ void pgResetFn_rpmFilterConfig(rpmFilterConfig_t *config)
     config->dterm_rpm_notch_min = 100;
     config->dterm_rpm_notch_q = 500;
 
-    config->rpm_lpf = 150;
+    config->rpm_lpf = 10;
+    config->rpm_tail_gear_ratio = 0;
 }
 
 static void rpmNotchFilterInit(rpmNotchFilter_t* filter, int harmonics, int minHz, int q, float looptime)
 {
-    filter->harmonics = harmonics;
+    // If tail gear ratio != 0, harmonics will be created for the tail rpm as well
+    // If main gear ratio > 1.1, harmonics will be created for the main motor rpm as well
+    int totalHarmonicsCount = harmonics;
+    if (mixerGetGovGearRatio() > 1.1f) {
+        totalHarmonicsCount += harmonics;
+    }
+    if (tailGearRatio > 0) {
+        totalHarmonicsCount += harmonics;
+    }
+    filter->harmonics = totalHarmonicsCount;
+    filter->harmonicsPerFreq = harmonics;
     filter->minHz = minHz;
     filter->q = q / 100.0f;
     filter->loopTime = looptime;
 
     for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
         for (int motor = 0; motor < getMotorCount(); motor++) {
-            for (int i = 0; i < harmonics; i++) {
+            for (int currentHarmonic = 0; currentHarmonic < totalHarmonicsCount; currentHarmonic++) {
+                // Initialize each filter to minHz * harmonic
+                float frequencyMultiplier = 0.0f;
+                int workingHarmonic = currentHarmonic % harmonics;
+                // Figure out if we're on a head, main, or tail harmonic
+                if (currentHarmonic < harmonics) {
+                    // First set of harmonics are always headspeed
+                    frequencyMultiplier = (workingHarmonic + 1);           
+                } else if (currentHarmonic / harmonics == 1) {
+                    // Calculate main motor frequency using headspeed
+                    // HF3D TODO:  Kind of inefficient right now how we're using mainGearRatio to calculate headspeed and then undoing it here?
+                    frequencyMultiplier = (workingHarmonic + 1) * mixerGetGovGearRatio();
+                } else if (currentHarmonic / harmonics == 2) {
+                    // Calculate tail frequency using headspeed
+                    frequencyMultiplier = (workingHarmonic + 1) * tailGearRatio;
+                }
+                // HF3D:  This used to be minHz*i, but that initializes the first filter to 0Hz... which probably isn't right?
+                //   But it also probably doesn't matter since the filter coefficients will be updated on the next loop through.
                 biquadFilterInit(
-                    &filter->notch[axis][motor][i], minHz * i, looptime, filter->q, FILTER_NOTCH);
+                    &filter->notch[axis][motor][currentHarmonic], minHz * frequencyMultiplier, looptime, filter->q, FILTER_NOTCH);
             }
         }
     }
@@ -118,6 +154,7 @@ void rpmFilterInit(const rpmFilterConfig_t *config)
 {
     currentFilter = &filters[0];
     currentMotor = currentHarmonic = currentFilterNumber = 0;
+    tailGearRatio = config->rpm_tail_gear_ratio / 100.0f;       // HF3D
 
     numberRpmNotchFilters = 0;
     if (!motorConfig()->dev.useDshotTelemetry) {
@@ -163,6 +200,7 @@ void rpmFilterInit(const rpmFilterConfig_t *config)
     erpmToHz1 = ERPM_PER_LSB / SECONDS_PER_MINUTE  / (12.0f / 2.0f);
 
     const float loopIterationsPerUpdate = MIN_UPDATE_T / (pidLooptime * 1e-6f);
+    // HF3D TODO:  May need to fix this numberFilters count and filter init for a geared main motor + motor-driven tail combo
     numberFilters = getMotorCount() * (filters[0].harmonics + filters[1].harmonics);
     const float filtersPerLoopIteration = numberFilters / loopIterationsPerUpdate;
     filterUpdatesPerIteration = rintf(filtersPerLoopIteration + 0.49f);
@@ -226,9 +264,24 @@ FAST_CODE_NOINLINE void rpmFilterUpdate()
 
     // Implement a simple load balancer that splits the filter updates up so that they update their frequency over the space of ~1ms.
     for (int i = 0; i < filterUpdatesPerIteration; i++) {
-        // Calculate the frequency of the harmonic we're updating
-        float frequency = constrainf(
-            (currentHarmonic + 1) * motorFrequency[currentMotor], currentFilter->minHz, currentFilter->maxHz);
+        // Calculate the frequency of the harmonic we're updating.  Harmonic 0 = fundamental = 1*frequency
+        float frequency = 0.0f;
+        int workingHarmonic = currentHarmonic % currentFilter->harmonicsPerFreq;
+        // Figure out if we're on a head, main, or tail harmonic
+        if (currentHarmonic < currentFilter->harmonicsPerFreq) {
+            // First set of harmonics are always headspeed
+            frequency = constrainf(
+            (workingHarmonic + 1) * motorFrequency[currentMotor], currentFilter->minHz, currentFilter->maxHz);            
+        } else if (currentHarmonic / currentFilter->harmonicsPerFreq == 1) {
+            // Calculate main motor frequency using headspeed
+            // HF3D TODO:  Kind of inefficient right now how we're using mainGearRatio to calculate headspeed and then undoing it here?
+            frequency = constrainf(
+            (workingHarmonic + 1) * motorFrequency[currentMotor] * mixerGetGovGearRatio(), currentFilter->minHz, currentFilter->maxHz);
+        } else if (currentHarmonic / currentFilter->harmonicsPerFreq == 2) {
+            // Calculate tail frequency using headspeed
+            frequency = constrainf(
+            (workingHarmonic + 1) * motorFrequency[currentMotor] * tailGearRatio, currentFilter->minHz, currentFilter->maxHz);            
+        }
         // Update the roll axis filter coefficients for this motor & harmonic
         biquadFilter_t* template = &currentFilter->notch[0][currentMotor][currentHarmonic];
         // uncomment below to debug filter stepping. Need to also comment out motor rpm DEBUG_SET above
