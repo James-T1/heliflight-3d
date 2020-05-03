@@ -97,6 +97,7 @@ static uint8_t servoRuleCount = 0;
 static servoMixer_t currentServoMixer[MAX_SERVO_RULES];
 static int useServo;
 int servo_override[MAX_SUPPORTED_SERVOS];
+int servo_input_override[5];
 
 #define COUNT_SERVO_RULES(rules) (sizeof(rules) / sizeof(servoMixer_t))
 // mixer rule format servo, input, rate, speed, min, max, box
@@ -223,6 +224,9 @@ void servosInit(void)
     // Reset servo position override
     for (int i = 0; i < MAX_SUPPORTED_SERVOS; i++) {
         servo_override[i] = 2001;
+    }
+    for (int i = 0; i < 5; i++) {
+        servo_input_override[i] = 0;
     }
     
     // enable servos for mixes that require them. note, this shifts motor counts.
@@ -458,6 +462,8 @@ void servoMixer(void)
         servo[i] = 0;
     }
 
+    // HF3D TODO:  Implement collective max/min limit settings and then scale the input RC command to those limits.
+
     // HF3D TODO:  Does swash ring need to be implemented on the rcCommand side also for roll & pitch?
     //          Or does that just sort of happen by default when it's implemented on the back-end like this?
 
@@ -477,9 +483,23 @@ void servoMixer(void)
         input[INPUT_STABILIZED_ROLL] = input[INPUT_STABILIZED_ROLL] * ABS(input[INPUT_STABILIZED_ROLL]) / swashRingTotal;
         input[INPUT_STABILIZED_PITCH] = input[INPUT_STABILIZED_PITCH] * ABS(input[INPUT_STABILIZED_PITCH]) / swashRingTotal;
     }
-    // NOTE:  pidSumLimit should be increased until exactly 10 degrees of cyclic pitch is achieved at maximum swash deflection and zero collective pitch
+    // NOTE:  pidSumLimit for roll & pitch should be increased until exactly 10 degrees of cyclic pitch is achieved at maximum swash deflection and zero collective pitch
     //   It's best to start low with pidSumLimit and then increase it while continuing to measure total pitch.  This avoids damage to servos from binding.
     //   Warning:  More than 10 degrees of available cyclic pitch can lead to boom strikes!!!
+
+
+    // HF3D:  Override servo mixer inputs if user asks us to (via CLI or MSP/Configurator)
+    //   "servo_input_override ON" sets servo_input_override[4] to 1.  OFF sets it to 0.
+    //   "servo_input_override 0 50" sets collective input to 50 (inputs are generally on a -500 to +500 range)
+    //   NOTE:  The only limitations to these overrides are the servo max/min PWM!  Be careful!
+    if (!ARMING_FLAG(ARMED) && servo_input_override[4]) {
+
+        input[INPUT_RC_AUX1] = servo_input_override[0];  // Put collective on the first override since it will be the most common
+        input[INPUT_STABILIZED_ROLL] = servo_input_override[1];
+        input[INPUT_STABILIZED_PITCH] = servo_input_override[2];
+        input[INPUT_STABILIZED_YAW] = servo_input_override[3];
+
+    }
 
     // mix servos according to smix rules
     //   https://github.com/cleanflight/cleanflight/blob/master/docs/Mixer.md
@@ -570,11 +590,15 @@ static void servoTable(void)
         }
     }
 
-    // override servo position if user asked us to (via CLI or MSP/Configurator)
+    // HF3D:  add offset to servo center position if user asks us to (via CLI or MSP/Configurator)
+    //  When combined with "servo_input_override on" this allows the user to determine servo centers for swashplate leveling
+    //  Recommend first turning on servo_input_override on, adjusting swash level, and then adjusting collective zero point
+    //  Then type "servo_position" to see the new servo output values.  Use the "servo" command to make these the new center point for each servo.
     if (!ARMING_FLAG(ARMED)) {
         for (int i = 0; i < MAX_SUPPORTED_SERVOS; i++) {
             if (servo_override[i] < 2000) {
-                servo[i] = servo_override[i] + determineServoMiddleOrForwardFromChannel(i);
+                //servo[i] = servo_override[i] + determineServoMiddleOrForwardFromChannel(i);
+                servo[i] += servo_override[i];
             }          
         }
     }

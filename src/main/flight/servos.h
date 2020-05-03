@@ -135,6 +135,7 @@ typedef struct servoProfile_s {
 
 extern int16_t servo[MAX_SUPPORTED_SERVOS];
 extern int servo_override[MAX_SUPPORTED_SERVOS];
+extern int servo_input_override[5];
 
 bool isMixerUsingServos(void);
 void writeServos(void);
