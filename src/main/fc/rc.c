@@ -233,7 +233,7 @@ static void calculateSetpointRate(int axis)
     DEBUG_SET(DEBUG_ANGLERATE, axis, angleRate);
 }
 
-static void scaleRcCommandToFpvCamAngle(void)
+/* static void scaleRcCommandToFpvCamAngle(void)
 {
     //recalculate sin/cos only when rxConfig()->fpvCamAngleDegrees changed
     static uint8_t lastFpvCamAngleDegrees = 0;
@@ -250,9 +250,9 @@ static void scaleRcCommandToFpvCamAngle(void)
     float yaw = setpointRate[YAW];
     setpointRate[ROLL] = constrainf(roll * cosFactor -  yaw * sinFactor, -SETPOINT_RATE_LIMIT * 1.0f, SETPOINT_RATE_LIMIT * 1.0f);
     setpointRate[YAW]  = constrainf(yaw  * cosFactor + roll * sinFactor, -SETPOINT_RATE_LIMIT * 1.0f, SETPOINT_RATE_LIMIT * 1.0f);
-}
+} */
 
-#define THROTTLE_BUFFER_MAX 20
+/* #define THROTTLE_BUFFER_MAX 20
 #define THROTTLE_DELTA_MS 100
 
 static void checkForThrottleErrorResetState(uint16_t rxRefreshRate)
@@ -278,7 +278,7 @@ static void checkForThrottleErrorResetState(uint16_t rxRefreshRate)
             pidSetItermAccelerator(1.0f);
         }
     }
-}
+} */
 
 static FAST_CODE uint8_t processRcInterpolation(void)
 {
@@ -633,9 +633,9 @@ FAST_CODE void processRcCommand(void)
         rcFrameNumber++;
     }
 
-    if (isRXDataNew && pidAntiGravityEnabled()) {
-        checkForThrottleErrorResetState(currentRxRefreshRate);
-    }
+    // if (isRXDataNew && pidAntiGravityEnabled()) {
+        // checkForThrottleErrorResetState(currentRxRefreshRate);
+    // }
 
 #ifdef USE_INTERPOLATED_SP
     if (isRXDataNew) {
@@ -676,10 +676,10 @@ FAST_CODE void processRcCommand(void)
 
         DEBUG_SET(DEBUG_RC_INTERPOLATION, 3, setpointRate[0]);
 
-        // Scaling of AngleRate to camera angle (Mixing Roll and Yaw)
+/*         // Scaling of AngleRate to camera angle (Mixing Roll and Yaw)
         if (rxConfig()->fpvCamAngleDegrees && IS_RC_MODE_ACTIVE(BOXFPVANGLEMIX) && !FLIGHT_MODE(HEADFREE_MODE)) {
             scaleRcCommandToFpvCamAngle();
-        }
+        } */
     }
 
     if (isRXDataNew) {
