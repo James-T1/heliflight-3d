@@ -706,22 +706,13 @@ bool processRx(timeUs_t currentTimeUs)
     // Disable PID control if at zero throttle or if gyro overflow detected
     /* In airmode iterm should be prevented to grow when Low thottle and Roll + Pitch Centered.
      This is needed to prevent iterm winding on the ground, but keep full stabilisation on 0 throttle while in air */
-    // HF3D:  Prevent iTerm windup if not spooled up and collective hasn't past midpoint + 5% yet  (light on skids)
-    // HF3D TODO:  Add collective check to the list.  
-    //    Once throttle>0 and Armed, wait until collective > midpoint+5% for the first time before enabling PID_STABILISATION???
-    //       Or at least.... before allowing Level mode to impact PID sums?
-    //       Maybe easiest would be to just put in this check and let it kill the I terms just like any of the other checks.
-    //    I'm kind of worried about what spooling up in the stabilization mode might or might not do, even if iTerm isn't winding up?
-    // spooledUp:
-    //   spooledUp is reset to 0 if (mainMotorRPM < 1000.0f)
-    //   spooledUp will set to "1" the first time if it's a "clean" spoolup where you arm and spool to a single throttle setpoint
-    //   If user spools up above 1000rpm, then lowers throttle below the last spool target reached, the heli will be considered spooled up
     //Old code w/airMode:   if (throttleStatus == THROTTLE_LOW && !airmodeIsActivated) {
     // HF3D:  Get rid of iTerms when throttle is off?  Probably not a good idea if we want control during autorotations??
     //if (throttleStatus == THROTTLE_LOW || !isHeliSpooledUp()) {
+    /*
     if (!isHeliSpooledUp()) {
         pidSetItermReset(true);                                // Reset all I terms and absolute control accumulated error
-        if (currentPidProfile->pidAtMinThrottle)               // Defaults to true.  No CLI setting for this either?
+        if (currentPidProfile->pidAtMinThrottle)               // Defaults setting is true
             pidStabilisationState(PID_STABILISATION_ON);       // Enable stabilization for the aircraft
         else
             pidStabilisationState(PID_STABILISATION_OFF);      // Disable stabilization for the aircraft
@@ -731,6 +722,12 @@ bool processRx(timeUs_t currentTimeUs)
         // Let the PID controller stabilize the aircraft
         pidStabilisationState(PID_STABILISATION_ON);
     }
+    */
+    // HF3D TODO:  Think about the section above sometime.  We're not really using it now that we are decaying
+    //  any accumulated error while not spooledUp (or if error_decay_always is true)
+    pidSetItermReset(false);
+    pidStabilisationState(PID_STABILISATION_ON);
+    
 
 #ifdef USE_RUNAWAY_TAKEOFF
     // If runaway_takeoff_prevention is enabled, accumulate the amount of time that throttle

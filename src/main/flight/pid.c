@@ -230,6 +230,8 @@ void resetPidProfile(pidProfile_t *pidProfile)
         .yawCycKf = 0,
         .yawBaseThrust = 900,
         .rescue_collective = 200,
+        .error_decay_always = 0,
+        .error_decay_rate = 7,
     );
 #ifndef USE_D_MIN
     pidProfile->pid[PID_ROLL].D = 30;
@@ -1564,6 +1566,18 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
         const float Ki = pidCoefficient[axis].Ki;
         // dynCi = dT if airmode disabled and iterm_windup = 100
         pidData[axis].I = constrainf(previousIterm + Ki * itermErrorRate * dynCi, -itermLimit, itermLimit);
+        
+        // Decay accumulated error if appropriate
+#define signorzero(x) ((x < 0) ? -1 : (x > 0) ? 1 : 0)
+        if (!isHeliSpooledUp() || pidProfile->error_decay_always) {
+            // Calculate number of degrees to remove from the accumulated error
+            const float decayFactor = pidProfile->error_decay_rate * dT;
+
+            pidData[axis].I -= signorzero(pidData[axis].I) * decayFactor * Ki;
+#if defined(USE_ABSOLUTE_CONTROL)
+            axisError[axis] -= signorzero(axisError[axis]) * decayFactor;
+#endif
+        }
 
         // -----calculate pidSetpointDelta
         float pidSetpointDelta = 0;
@@ -1781,6 +1795,7 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
 
     // Disable PID control if at zero throttle or if gyro overflow detected
     // This may look very inefficient, but it is done on purpose to always show real CPU usage as in flight
+    // HF3D TODO:  We're not really using this right now since we're decaying accumulated error in the main PID loop to handle initial spool-up
     if (!pidStabilisationEnabled || gyroOverflowDetected()) {
         for (int axis = FD_ROLL; axis <= FD_YAW; ++axis) {
             pidData[axis].P = 0;
