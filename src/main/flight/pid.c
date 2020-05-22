@@ -1693,7 +1693,7 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
             
             // Collective pitch impulse feed-forward for the main motor
             // Run our collectiveStickPercent through a low pass filter
-            // HF3D TODO:  Pulse filter calc should probably be moved to PID?  But it's probably shouldn't be a profile setting?
+            // HF3D TODO:  Pulse filter calc should probably be moved to PID?  But it probably shouldn't be a profile setting?
             collectiveStickLPF = collectiveStickLPF + mixerGetGovCollectivePulseFilterGain() * (collectiveStickPercent - collectiveStickLPF);
             // Subtract LPF from the original value to get a high pass filter
             // HPF value will be <60% or so of the collectiveStickPercent, and will be smaller the slower the stick movement is.
