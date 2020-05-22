@@ -691,9 +691,13 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
     if (motorCount > 0) {
 
         // Calculate headspeed
-        float mainMotorRPM = rpmGetFilteredMotorRPM(0);    // Get main motor rpm  --- what about calcESCrpm if DSHOT not available, but normal ESC telemetry is?
+#ifdef USE_RPM_FILTER
+        float mainMotorRPM = rpmGetFilteredMotorRPM(0);    // Get filtered main motor rpm from rpm_filter's source
+#else
+        float mainMotorRPM = 0.0f;
+#endif        
         float headspeed = mainMotorRPM / govGearRatio;
-                
+        
         // Some logic to help us come back from a stage 1 failsafe / glitch / RPM loss / accidental throttle hold quickly
         // We're going to use this time to lock in our spooledUp state for a few seconds after throttle = 0 when we were just spooledUp on the last pass through
         // Also gives us a few second window if we lose headspeed signal... in that case we'll fall back to the commanded throttle value
@@ -898,7 +902,9 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         DEBUG_SET(DEBUG_SMARTAUDIO, 0, governorSetpointLimited);
         DEBUG_SET(DEBUG_SMARTAUDIO, 1, headspeed);
         //DEBUG_SET(DEBUG_SMARTAUDIO, 2, govPidSum*1000.0f);             // Max pidsum will be around 1, so increase by 1000x
+#ifdef USE_RPM_FILTER
         DEBUG_SET(DEBUG_SMARTAUDIO, 3, rpmGetFilteredMotorRPM(1));  // Tail motor RPM
+#endif
 
         // HF3D:  Modified original code to ignore any idle offset value when scaling main motor output -- we should always ensure that the main motor will be 100% stopped at zero throttle.
         //   motorOutputMin = motorRangeMin = motorOutputLow = DSHOT_MIN_THROTTLE

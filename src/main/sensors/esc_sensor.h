@@ -50,6 +50,8 @@ typedef struct {
 
 bool escSensorInit(void);
 void escSensorProcess(timeUs_t currentTime);
+bool isEscSensorActive(void);
+uint16_t getEscSensorRPM(uint8_t motorNumber);
 
 #define ESC_SENSOR_COMBINED 255
 

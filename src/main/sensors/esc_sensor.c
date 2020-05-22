@@ -153,6 +153,66 @@ bool isEscSensorActive(void)
     return escSensorPort != NULL;
 }
 
+// HF3D:  Added to provide RPM data to rpm filter and spoolup/governor logic when DSHOT RPM or RPM Sensor isn't available.
+bool isEscSensorValid(uint8_t motorNumber)
+{
+    // First check escSensorPort != NULL
+    if (escSensorPort == NULL) {
+        return 0;
+    }
+    
+    if ( escSensorConfig()->escSensorProtocol == ESC_SENSOR_PROTOCOL_KISS ) {
+        // KISS:  Check if dataAge < ESC_BATTERY_AGE_MAX
+        if (motorNumber < getMotorCount()) {
+            return (escSensorData[motorNumber].dataAge <= ESC_BATTERY_AGE_MAX);
+        } else if (motorNumber == ESC_SENSOR_COMBINED) {
+            return (combinedEscSensorData.dataAge <= ESC_BATTERY_AGE_MAX);
+        } else {
+            return 0;
+        }
+    
+    } else if ( escSensorConfig()->escSensorProtocol == ESC_SENSOR_PROTOCOL_HOBBYWINGV4 ) {
+        // HWV4:  dataAge < 100 while disarmed  or  dataAge < 11 while armed
+        //   Realistically we get these every 40 while disarmed and 4 while motor is spinning (rpm>0)
+        uint8_t thisDataAge = 0;
+        uint16_t thisRPM = 0;
+        
+        if (motorNumber < getMotorCount()) {
+            thisDataAge = escSensorData[motorNumber].dataAge;
+            thisRPM = escSensorData[motorNumber].rpm;
+        } else if (motorNumber == ESC_SENSOR_COMBINED) {
+            thisDataAge = combinedEscSensorData.dataAge;
+            thisRPM = combinedEscSensorData.rpm;
+        } else {
+            return 0;
+        }
+
+        // If last RPM value was > 0 (motor spinning) then we should be receiving telemetry every 50ms
+        // HF3D TODO:  This will break if scheduler is changed to increase polling rate of escSensorProcess task beyond 100Hz.
+        if (thisRPM > 0 && thisDataAge < 11) {
+            return 1;
+        } else if (thisRPM == 0 && thisDataAge < 100) {
+            return 1;
+        }
+    
+    }
+    
+    return 0;
+}
+
+uint16_t getEscSensorRPM(uint8_t motorNumber)
+{
+    // We check to see if ESC sensor data is valid elsewhere, and set RPM to zero if not.  
+    //   So this will return RPM = 0 if ESC sensor telemetry is not active.
+    if (motorNumber < getMotorCount()) {
+        return escSensorData[motorNumber].rpm;
+    } else {
+        return 0;
+    }
+}
+// ------- End of code to provide RPM data to rpm filter and spoolup/governor logic
+
+
 escSensorData_t *getEscSensorData(uint8_t motorNumber)
 {
     if (!featureIsEnabled(FEATURE_ESC_SENSOR)) {
@@ -504,7 +564,6 @@ void escSensorProcess(timeUs_t currentTimeUs)
         escSensorMotor = 0;
 
         // Increment data aging so we'll know if we don't get a valid data packet on a ESC sensor read
-        //  May need to re-define ESC_BATTERY_AGE_MAX or change how we're doing this if Hobbywing ESC telemetry data is too slow (don't think it will be a problem though)
         escSensorData[escSensorMotor].dataAge++;
         
         // check for any available ESC telemetry bytes in the buffer
@@ -563,8 +622,24 @@ void escSensorProcess(timeUs_t currentTimeUs)
         consumption += (currentTimeMs - lastProcessTimeMs) * (float) escSensorData[escSensorMotor].current * 10.0f / (1000.0f * 3600.0f);
         escSensorData[escSensorMotor].consumption = (int32_t) consumption;
         lastProcessTimeMs = currentTimeMs;
-
+        
     }  // End of HobbyWing V4 Telemetry
+
+    // Check every motor for invalid dataAge to see if we need to zero out our values
+    //   Better to do this here at slower loop rate than in the getRPM function that runs at rpmFilter rate!
+    for (int i = 0; i < getMotorCount(); i++) {
+        if (!isEscSensorValid(i)) {
+            // Reset all the data
+            escSensorData[i].voltage = 0;
+            escSensorData[i].current = 0;
+            escSensorData[i].consumption = 0;
+            escSensorData[i].rpm = 0;
+            combinedEscSensorData.voltage = 0;
+            combinedEscSensorData.current = 0;
+            combinedEscSensorData.consumption = 0;
+            combinedEscSensorData.rpm = 0;
+        }        
+    }
 }
 
 int calcEscRpm(int erpm)

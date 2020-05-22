@@ -44,6 +44,8 @@
 
 #include "rpm_filter.h"
 
+#include "sensors/esc_sensor.h"
+
 // HF3D:  Increasing MAXHARMONICS from 3 to 12 took ITCM_RAM from 15,472B @ 94.43% used to 17,680B @ 107.91% used.
 // Reducing from 12 to 9 took it down to 16,944B with 103.42% used
 // Reducing MAX_SUPPORTED_MOTORS from 8 to 4 with MAXHARMONICS = 9 took it to... almost no difference.  Which was surprising.
@@ -88,6 +90,8 @@ FAST_RAM_ZERO_INIT static uint8_t currentMotor;
 FAST_RAM_ZERO_INIT static uint8_t currentHarmonic;
 FAST_RAM_ZERO_INIT static uint8_t currentFilterNumber;
 FAST_RAM static rpmNotchFilter_t* currentFilter = &filters[0];
+
+FAST_RAM_ZERO_INIT static uint8_t rpmSource;    // HF3D:  Dshot telemetry = 0, RPM sensor = 1, ESC_Sensor = 2
 
 
 PG_REGISTER_WITH_RESET_FN(rpmFilterConfig_t, rpmFilterConfig, PG_RPM_FILTER_CONFIG, 3);
@@ -157,11 +161,20 @@ void rpmFilterInit(const rpmFilterConfig_t *config)
     tailGearRatio = config->rpm_tail_gear_ratio / 100.0f;       // HF3D
 
     numberRpmNotchFilters = 0;
-    if (!motorConfig()->dev.useDshotTelemetry) {
+    
+    // HF3D TODO:  Make all the RPM filter code work even if we weren't built with USE_DSHOT.
+    if (motorConfig()->dev.useDshotTelemetry) {
+        rpmSource = 0;
+    // HF3D TODO:  Add an RPM sensor input to the if chain once we support them
+    } else if (isEscSensorActive()) {
+        rpmSource = 2;
+    } else {
+        // No RPM source available
+        rpmSource = 255;
         gyroFilter = dtermFilter = NULL;
         return;
     }
-
+    
     pidLooptime = gyro.targetLooptime * pidConfig()->pid_process_denom;
     if (config->gyro_rpm_notch_harmonics) {
         gyroFilter = &filters[numberRpmNotchFilters++];
@@ -256,7 +269,16 @@ FAST_CODE_NOINLINE void rpmFilterUpdate()
     // Loop over all the motors and low-pass filter their RPM values to stabilize it
     for (int motor = 0; motor < getMotorCount(); motor++) {
         // Get the motor eRPM using bi-directional DSHOT and then filter it using PT1 low-pass filter
-        filteredMotorErpm[motor] = pt1FilterApply(&rpmFilters[motor], getDshotTelemetry(motor));
+        uint16_t motorRpm = 0;
+        if (rpmSource == 0) {
+            motorRpm = getDshotTelemetry(motor);
+        // HF3D TODO:  Add support for RPM sensor to the if chain here once we support it.
+        } else if (rpmSource == 2) {
+            motorRpm = getEscSensorRPM(motor);
+        } else {
+            motorRpm = 0;
+        }
+        filteredMotorErpm[motor] = pt1FilterApply(&rpmFilters[motor], motorRpm);
         if (motor < 4) {
             DEBUG_SET(DEBUG_RPM_FILTER, motor, motorFrequency[motor]);
         }
@@ -333,7 +355,7 @@ FAST_CODE_NOINLINE void rpmFilterUpdate()
 
 bool isRpmFilterEnabled(void)
 {
-    return (motorConfig()->dev.useDshotTelemetry && (rpmFilterConfig()->gyro_rpm_notch_harmonics || rpmFilterConfig()->dterm_rpm_notch_harmonics));
+    return (rpmSource < 255 && (rpmFilterConfig()->gyro_rpm_notch_harmonics || rpmFilterConfig()->dterm_rpm_notch_harmonics));
 }
 
 float rpmMinMotorFrequency()
