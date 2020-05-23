@@ -622,9 +622,9 @@ void pidInitConfig(const pidProfile_t *pidProfile)
     }
     for (int axis = FD_ROLL; axis <= FD_YAW; axis++) {
         // Scale down Roll & Pitch axis PID terms for helicopters.  Leave Yaw axis alone.
-        pidCoefficient[axis].Kp = PTERM_SCALE * pidProfile->pid[axis].P / (axis == FD_YAW) ? 1.0f : 10.0f;
-        pidCoefficient[axis].Ki = ITERM_SCALE * pidProfile->pid[axis].I / (axis == FD_YAW) ? 1.0f : 5.0f;
-        pidCoefficient[axis].Kd = DTERM_SCALE * pidProfile->pid[axis].D / (axis == FD_YAW) ? 1.0f : 10.0f;
+        pidCoefficient[axis].Kp = PTERM_SCALE * pidProfile->pid[axis].P / ((axis == FD_YAW) ? 1.0f : 10.0f);
+        pidCoefficient[axis].Ki = ITERM_SCALE * pidProfile->pid[axis].I / ((axis == FD_YAW) ? 1.0f : 5.0f);
+        pidCoefficient[axis].Kd = DTERM_SCALE * pidProfile->pid[axis].D / ((axis == FD_YAW) ? 1.0f : 10.0f);
         pidCoefficient[axis].Kf = FEEDFORWARD_SCALE * (pidProfile->pid[axis].F / 100.0f);
     }
     
