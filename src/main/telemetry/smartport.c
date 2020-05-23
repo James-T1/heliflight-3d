@@ -655,7 +655,7 @@ void processSmartPortTelemetry(smartPortPayload_t *payload, volatile bool *clear
             case FSSP_DATAID_RPM        :
                 escData = getEscSensorData(ESC_SENSOR_COMBINED);
                 if (escData != NULL) {
-                    smartPortSendPackage(id, calcEscRpm(escData->rpm));
+                    smartPortSendPackage(id, calcEscRpm(escData->rpm)/mixerGetGovGearRatio());
                     *clearToSend = false;
                 }
                 break;
