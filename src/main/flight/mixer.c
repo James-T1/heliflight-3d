@@ -908,12 +908,17 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
 
         // HF3D:  Modified original code to ignore any idle offset value when scaling main motor output -- we should always ensure that the main motor will be 100% stopped at zero throttle.
         //   motorOutputMin = motorRangeMin = motorOutputLow = DSHOT_MIN_THROTTLE
+        float motorOutput;
 #ifdef USE_DSHOT
-        float motorOutput = DSHOT_MIN_THROTTLE + (motorOutputHigh - DSHOT_MIN_THROTTLE) * throttle;
-#else
-        //   for analog PWM, change motorOutputMin to disarmMotorOutput to be safe
-        float motorOutput = disarmMotorOutput + (motorOutputHigh - disarmMotorOutput) * throttle;
+        if (isMotorProtocolDshot()) {
+            motorOutput = DSHOT_MIN_THROTTLE + (motorOutputHigh - DSHOT_MIN_THROTTLE) * throttle;
+        } else
 #endif
+        {
+            // For analog PWM, use disarmMotorOutput for safety
+            // if min_command = 1000 and max_command = 1940  =>  motorOutput = 1000 + (940)*throttle
+            motorOutput = disarmMotorOutput + (motorOutputHigh - disarmMotorOutput) * throttle;
+        }
 
         if (failsafeIsActive()) {
 #ifdef USE_DSHOT
