@@ -710,7 +710,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
                 
         // Determine governor setpoint (use governor if throttle setting is >50%)
         // HF3D TODO:  Check !isDshotMotorTelemetryActive(i)
-        if (throttle > 0.50) {
+        if (throttle > 0.50 && govMaxHeadspeed > 0) {
 
             // Set the user requested governor headspeed setting
             governorSetpoint = throttle * (float)govMaxHeadspeed;
