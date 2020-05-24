@@ -31,6 +31,8 @@
 #include "common/filter.h"
 #include "common/maths.h"
 
+#include "config/feature.h"    // For checking if ESC_SENSOR is enabled.  The might be some other better method if init order is re-arranged or something.
+
 #include "drivers/dshot.h"
 
 #include "flight/mixer.h"
@@ -166,7 +168,9 @@ void rpmFilterInit(const rpmFilterConfig_t *config)
     if (motorConfig()->dev.useDshotTelemetry) {
         rpmSource = 0;
     // HF3D TODO:  Add an RPM sensor input to the if chain once we support them
-    } else if (isEscSensorActive()) {
+    // The check below doesn't work because escSensorInit() isn't called until after rpmFilterInit
+    //} else if (isEscSensorActive()) {
+    } else if (featureIsEnabled(FEATURE_ESC_SENSOR)) {
         rpmSource = 2;
     } else {
         // No RPM source available

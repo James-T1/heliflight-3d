@@ -59,6 +59,7 @@
 #include "flight/mixer_tricopter.h"
 #include "flight/pid.h"
 #include "flight/rpm_filter.h"
+#include "flight/servos.h"
 
 #include "rx/rx.h"
 
@@ -401,7 +402,7 @@ void mixerInit(mixerMode_e mixerMode)
     govGearRatio = (float)mixerConfig()->gov_gear_ratio / 100.0f;
     govKp = (float)mixerConfig()->gov_p_gain / 10.0f;
     govKi = (float)mixerConfig()->gov_i_gain / 10.0f;
-    govCycKf = (float)mixerConfig()->gov_cyclic_ff_gain / 10.0f;
+    govCycKf = (float)mixerConfig()->gov_cyclic_ff_gain / 100.0f;
     govColKf = (float)mixerConfig()->gov_collective_ff_gain / 10000.0f;
     govColPulseKf = (float)mixerConfig()->gov_collective_ff_impulse_gain / 10000.0f;
     govColPulseFc = (float)mixerConfig()->gov_collective_ff_impulse_freq / 100.0f;     // Setting is frequency in Hz / 100
@@ -833,6 +834,11 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         // HF3D TODO:  Add a cyclic stick feedforward to the governor - linear gain should be fine.
         // Additional torque is required from the motor when adding cyclic pitch, just like collective (although less)
         // Maybe use this?:  float transition = feedForwardTransition > 0 ? MIN(1.f, getRcDeflectionAbs(axis) * feedForwardTransition) : 1;
+        // It's calculated like this in the pid.c code:
+        //   Calculate absolute value of the percentage of cyclic stick throw (both combined... but swash ring is the real issue).
+		//   float tailCyclicFF = -1.0f * servosGetSwashRingValue() * 100.0f * pidProfile->yawCycKf / 100.0f;
+        //   servosGetSwashRingValue() is a 0-1.0f value that is a fraction of the total cyclic travel allowed (usually 10 degrees)
+        float govCyclicFF = govCycKf * servosGetSwashRingValue();
         
         // --------------- End of Feedforward Calculations ---
 
@@ -858,7 +864,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
             //            to keep torque equal, so those shouldn't have to change.
             
             // Generate our new governed throttle signal
-            throttle = govBaseThrottle + govCollectiveFF + govCollectivePulseFF + govPidSum;
+            throttle = govBaseThrottle + govCollectiveFF + govCollectivePulseFF + govCyclicFF + govPidSum;
             // Reset any wind-up due to excess control signal
             if (throttle > 1.0f) {
                 // Remove last addition to I-term to prevent further wind-up if it was moving us towards this over-control

@@ -1711,7 +1711,7 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
             // float tailCyclicFF = ...
 			
             // Calculate absolute value of the percentage of cyclic stick throw (both combined... but swash ring is the real issue).
-			float tailCyclicFFGain = -1.0f * servosGetSwashRingValue() * 100.0f * pidProfile->yawCycKf / 100.0f;
+			float tailCyclicFF = -1.0f * servosGetSwashRingValue() * 100.0f * pidProfile->yawCycKf / 100.0f;
             
             // Main motor torque increase from the ESC is proportional to the absolute change in average voltage (NOT percent change in average voltage)
             //     and it is linear with the amount of change.
@@ -1738,7 +1738,7 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
             
             // Add our collective feedforward terms into the yaw axis pidSum as long as we don't have a motor driven tail
             if (getMotorCount() == 1) {
-                pidData[FD_YAW].F += tailCollectiveFF + tailCollectivePulseFF + tailBaseThrust + tailCyclicFFGain;
+                pidData[FD_YAW].F += tailCollectiveFF + tailCollectivePulseFF + tailBaseThrust + tailCyclicFF;
             }
             // HF3D TODO:  Do some integration of the motor driven tail code here for motorCount == 2...
             //   But have to be careful, because if main motor throttle goes near zero then we'll never get the tail back if we're
