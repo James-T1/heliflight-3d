@@ -50,17 +50,31 @@
 #include "flight/mixer.h"
 #include "flight/rpm_filter.h"
 #include "flight/interpolated_setpoint.h"
+#include "flight/servos.h"
 
 #include "io/gps.h"
 
 #include "pg/pg.h"
 #include "pg/pg_ids.h"
+#include "pg/rx.h"
+
+#include "rx/rx.h"
 
 #include "sensors/acceleration.h"
 #include "sensors/battery.h"
 #include "sensors/gyro.h"
 
 #include "pid.h"
+
+// HF3D:  Inits for PID Delay Compensation
+// Delay length = 8000Hz * 35ms = 280 loop times
+/*#define DELAYLENGTH  280            
+FAST_RAM_ZERO_INIT int delayArrayPos = 0;
+int16_t delayArrayRoll[DELAYLENGTH] = {0};
+int16_t delayArrayPitch[DELAYLENGTH] = {0};
+FAST_RAM_ZERO_INIT float delayCompSum[3] = {0.0f};
+FAST_RAM_ZERO_INIT float delayCompAlpha = 0.0f; */
+// End inits for PID Delay Compensation
 
 const char pidNames[] =
     "ROLL;"
@@ -79,11 +93,11 @@ static FAST_RAM_ZERO_INIT bool inCrashRecoveryMode = false;
 static FAST_RAM_ZERO_INIT float dT;
 static FAST_RAM_ZERO_INIT float pidFrequency;
 
-static FAST_RAM_ZERO_INIT uint8_t antiGravityMode;
-static FAST_RAM_ZERO_INIT float antiGravityThrottleHpf;
-static FAST_RAM_ZERO_INIT uint16_t itermAcceleratorGain;
-static FAST_RAM float antiGravityOsdCutoff = 1.0f;
-static FAST_RAM_ZERO_INIT bool antiGravityEnabled;
+//static FAST_RAM_ZERO_INIT uint8_t antiGravityMode;
+//static FAST_RAM_ZERO_INIT float antiGravityThrottleHpf;
+//static FAST_RAM_ZERO_INIT uint16_t itermAcceleratorGain;
+//static FAST_RAM float antiGravityOsdCutoff = 1.0f;
+//static FAST_RAM_ZERO_INIT bool antiGravityEnabled;
 static FAST_RAM_ZERO_INIT bool zeroThrottleItermReset;
 
 PG_REGISTER_WITH_RESET_TEMPLATE(pidConfig_t, pidConfig, PG_PID_CONFIG, 2);
@@ -210,6 +224,14 @@ void resetPidProfile(pidProfile_t *pidProfile)
         .ff_max_rate_limit = 100,
         .ff_smooth_factor = 37,
         .ff_boost = 15,
+        // HF3D parameters
+        .yawColKf = 300,
+        .yawColPulseKf = 300,
+        .yawCycKf = 0,
+        .yawBaseThrust = 900,
+        .rescue_collective = 200,
+        .error_decay_always = 0,
+        .error_decay_rate = 7,
     );
 #ifndef USE_D_MIN
     pidProfile->pid[PID_ROLL].D = 30;
@@ -234,17 +256,18 @@ static void pidSetTargetLooptime(uint32_t pidLooptime)
 #endif
 }
 
-static FAST_RAM float itermAccelerator = 1.0f;
+// HF3D TODO:  Remove iTermAccelerator from all the code
+//static FAST_RAM float itermAccelerator = 1.0f;
 
-void pidSetItermAccelerator(float newItermAccelerator)
-{
-    itermAccelerator = newItermAccelerator;
-}
+// void pidSetItermAccelerator(float newItermAccelerator)
+// {
+    // itermAccelerator = newItermAccelerator;
+// }
 
-bool pidOsdAntiGravityActive(void)
-{
-    return (itermAccelerator > antiGravityOsdCutoff);
-}
+// bool pidOsdAntiGravityActive(void)
+// {
+    // return (itermAccelerator > antiGravityOsdCutoff);
+// }
 
 void pidStabilisationState(pidStabilisationState_e pidControllerState)
 {
@@ -305,7 +328,7 @@ static FAST_RAM_ZERO_INIT pt1Filter_t airmodeThrottleLpf1;
 static FAST_RAM_ZERO_INIT pt1Filter_t airmodeThrottleLpf2;
 #endif
 
-static FAST_RAM_ZERO_INIT pt1Filter_t antiGravityThrottleLpf;
+//static FAST_RAM_ZERO_INIT pt1Filter_t antiGravityThrottleLpf;
 
 static FAST_RAM_ZERO_INIT float ffBoostFactor;
 static FAST_RAM_ZERO_INIT float ffSmoothFactor;
@@ -428,9 +451,9 @@ void pidInitFilters(const pidProfile_t *pidProfile)
         pt1FilterInit(&ptermYawLowpass, pt1FilterGain(pidProfile->yaw_lowpass_hz, dT));
     }
 
-#if defined(USE_THROTTLE_BOOST)
-    pt1FilterInit(&throttleLpf, pt1FilterGain(pidProfile->throttle_boost_cutoff, dT));
-#endif
+// #if defined(USE_THROTTLE_BOOST)
+    // pt1FilterInit(&throttleLpf, pt1FilterGain(pidProfile->throttle_boost_cutoff, dT));
+// #endif
 #if defined(USE_ITERM_RELAX)
     if (itermRelax) {
         for (int i = 0; i < XYZ_AXIS_COUNT; i++) {
@@ -463,7 +486,7 @@ void pidInitFilters(const pidProfile_t *pidProfile)
     }
 #endif
 
-    pt1FilterInit(&antiGravityThrottleLpf, pt1FilterGain(ANTI_GRAVITY_THROTTLE_FILTER_CUTOFF, dT));
+    //pt1FilterInit(&antiGravityThrottleLpf, pt1FilterGain(ANTI_GRAVITY_THROTTLE_FILTER_CUTOFF, dT));
 
     ffBoostFactor = (float)pidProfile->ff_boost / 10.0f;
     ffSpikeLimitInverse = pidProfile->ff_spike_limit ? 1.0f / ((float)pidProfile->ff_spike_limit / 10.0f) : 0.0f;
@@ -530,7 +553,7 @@ static FAST_RAM_ZERO_INIT float crashLimitYaw;
 static FAST_RAM_ZERO_INIT float itermLimit;
 #if defined(USE_THROTTLE_BOOST)
 FAST_RAM_ZERO_INIT float throttleBoost;
-pt1Filter_t throttleLpf;
+//pt1Filter_t throttleLpf;
 #endif
 static FAST_RAM_ZERO_INIT bool itermRotation;
 
@@ -564,12 +587,12 @@ FAST_RAM_ZERO_INIT float thrustLinearizationReciprocal;
 FAST_RAM_ZERO_INIT float thrustLinearizationB;
 #endif
 
-void pidUpdateAntiGravityThrottleFilter(float throttle)
-{
-    if (antiGravityMode == ANTI_GRAVITY_SMOOTH) {
-        antiGravityThrottleHpf = throttle - pt1FilterApply(&antiGravityThrottleLpf, throttle);
-    }
-}
+// void pidUpdateAntiGravityThrottleFilter(float throttle)
+// {
+    // if (antiGravityMode == ANTI_GRAVITY_SMOOTH) {
+        // antiGravityThrottleHpf = throttle - pt1FilterApply(&antiGravityThrottleLpf, throttle);
+    // }
+// }
 
 #ifdef USE_DYN_LPF
 static FAST_RAM uint8_t dynLpfFilter = DYN_LPF_NONE;
@@ -587,6 +610,9 @@ static FAST_RAM_ZERO_INIT float dMinSetpointGain;
 static FAST_RAM_ZERO_INIT ffInterpolationType_t ffFromInterpolatedSetpoint;
 #endif
 
+// HF3D
+static FAST_RAM_ZERO_INIT float rescueCollective;
+
 void pidInitConfig(const pidProfile_t *pidProfile)
 {
     if (pidProfile->feedForwardTransition == 0) {
@@ -595,17 +621,20 @@ void pidInitConfig(const pidProfile_t *pidProfile)
         feedForwardTransition = 100.0f / pidProfile->feedForwardTransition;
     }
     for (int axis = FD_ROLL; axis <= FD_YAW; axis++) {
-        pidCoefficient[axis].Kp = PTERM_SCALE * pidProfile->pid[axis].P;
-        pidCoefficient[axis].Ki = ITERM_SCALE * pidProfile->pid[axis].I;
-        pidCoefficient[axis].Kd = DTERM_SCALE * pidProfile->pid[axis].D;
+        // Scale down Roll & Pitch axis PID terms for helicopters.  Leave Yaw axis alone.
+        pidCoefficient[axis].Kp = PTERM_SCALE * pidProfile->pid[axis].P / ((axis == FD_YAW) ? 1.0f : 10.0f);
+        pidCoefficient[axis].Ki = ITERM_SCALE * pidProfile->pid[axis].I / ((axis == FD_YAW) ? 1.0f : 5.0f);
+        pidCoefficient[axis].Kd = DTERM_SCALE * pidProfile->pid[axis].D / ((axis == FD_YAW) ? 1.0f : 10.0f);
         pidCoefficient[axis].Kf = FEEDFORWARD_SCALE * (pidProfile->pid[axis].F / 100.0f);
     }
-#ifdef USE_INTEGRATED_YAW_CONTROL
-    if (!pidProfile->use_integrated_yaw)
-#endif
-    {
-        pidCoefficient[FD_YAW].Ki *= 2.5f;
-    }
+    
+    // HF3D:  Yaw integral gain does NOT need boosted on a helicopter.
+// #ifdef USE_INTEGRATED_YAW_CONTROL
+    // if (!pidProfile->use_integrated_yaw)
+// #endif
+    // {
+        // pidCoefficient[FD_YAW].Ki *= 2.5f;
+    // }
 
     levelGain = pidProfile->pid[PID_LEVEL].P / 10.0f;
     horizonGain = pidProfile->pid[PID_LEVEL].I / 10.0f;
@@ -620,7 +649,7 @@ void pidInitConfig(const pidProfile_t *pidProfile)
         const float itermWindupPoint = pidProfile->itermWindupPointPercent / 100.0f;
         itermWindupPointInv = 1.0f / (1.0f - itermWindupPoint);
     }
-    itermAcceleratorGain = pidProfile->itermAcceleratorGain;
+    //itermAcceleratorGain = pidProfile->itermAcceleratorGain;
     crashTimeLimitUs = pidProfile->crash_time * 1000;
     crashTimeDelayUs = pidProfile->crash_delay * 1000;
     crashRecoveryAngleDeciDegrees = pidProfile->crash_recovery_angle * 10;
@@ -631,20 +660,20 @@ void pidInitConfig(const pidProfile_t *pidProfile)
     crashLimitYaw = pidProfile->crash_limit_yaw;
     itermLimit = pidProfile->itermLimit;
 #if defined(USE_THROTTLE_BOOST)
-    throttleBoost = pidProfile->throttle_boost * 0.1f;
+    throttleBoost = pidProfile->throttle_boost;         // HF3D:  Now using this for flat piro compensation parameter testing
 #endif
     itermRotation = pidProfile->iterm_rotation;
-    antiGravityMode = pidProfile->antiGravityMode;
+    //antiGravityMode = pidProfile->antiGravityMode;
     
     // Calculate the anti-gravity value that will trigger the OSD display.
     // For classic AG it's either 1.0 for off and > 1.0 for on.
     // For the new AG it's a continuous floating value so we want to trigger the OSD
     // display when it exceeds 25% of its possible range. This gives a useful indication
     // of AG activity without excessive display.
-    antiGravityOsdCutoff = 1.0f;
-    if (antiGravityMode == ANTI_GRAVITY_SMOOTH) {
-        antiGravityOsdCutoff += ((itermAcceleratorGain - 1000) / 1000.0f) * 0.25f;
-    }
+    // antiGravityOsdCutoff = 1.0f;
+    // if (antiGravityMode == ANTI_GRAVITY_SMOOTH) {
+        // antiGravityOsdCutoff += ((itermAcceleratorGain - 1000) / 1000.0f) * 0.25f;
+    // }
 
 #if defined(USE_ITERM_RELAX)
     itermRelax = pidProfile->iterm_relax;
@@ -725,6 +754,9 @@ void pidInitConfig(const pidProfile_t *pidProfile)
     ffSmoothFactor = 1.0f - ((float)pidProfile->ff_smooth_factor) / 100.0f;
     interpolatedSpInit(pidProfile);
 #endif
+
+    // HF3D
+    rescueCollective = pidProfile->rescue_collective;
 }
 
 void pidInit(const pidProfile_t *pidProfile)
@@ -735,6 +767,12 @@ void pidInit(const pidProfile_t *pidProfile)
 #ifdef USE_RPM_FILTER
     rpmFilterInit(rpmFilterConfig());
 #endif
+
+    // HF3D:  Setup our PID Delay Compensation Alpha multiplier with a maximum of 0.10 and a minimum of 0.001
+    //  280 samples ==> 0.0036 would give the average of the last 280 samples of control output = subtracted off the output
+    //  2.5x average is where you probably want to be... around 0.009, or a setting of 9
+    // Uses crashflip_motor_percent for the setting since we have no use for that in a heli.
+    /* delayCompAlpha = mixerConfig()->crashflip_motor_percent / 1000.0f; */
 }
 
 #ifdef USE_ACRO_TRAINER
@@ -746,14 +784,6 @@ void pidAcroTrainerInit(void)
 #endif // USE_ACRO_TRAINER
 
 #ifdef USE_THRUST_LINEARIZATION
-float pidCompensateThrustLinearization(float throttle)
-{
-    if (thrustLinearization != 0.0f) {
-        throttle = throttle * (throttle * thrustLinearization + 1.0f - thrustLinearization);
-    }
-    return throttle;
-}
-
 float pidApplyThrustLinearization(float motorOutput)
 {
     if (thrustLinearization != 0.0f) {
@@ -832,27 +862,77 @@ STATIC_UNIT_TESTED float calcHorizonLevelStrength(void)
 }
 
 STATIC_UNIT_TESTED float pidLevel(int axis, const pidProfile_t *pidProfile, const rollAndPitchTrims_t *angleTrim, float currentPidSetpoint) {
-    // calculate error angle and limit the angle to the max inclination
-    // rcDeflection is in range [-1.0, 1.0]
-    float angle = pidProfile->levelAngleLimit * getRcDeflection(axis);
-#ifdef USE_GPS_RESCUE
-    angle += gpsRescueAngle[axis] / 100; // ANGLE IS IN CENTIDEGREES
-#endif
-    angle = constrainf(angle, -pidProfile->levelAngleLimit, pidProfile->levelAngleLimit);
-    const float errorAngle = angle - ((attitude.raw[axis] - angleTrim->raw[axis]) / 10.0f);
-    if (FLIGHT_MODE(ANGLE_MODE) || FLIGHT_MODE(GPS_RESCUE_MODE)) {
-        // ANGLE mode - control is angle based
-        currentPidSetpoint = errorAngle * levelGain;
+
+    if (FLIGHT_MODE(ANGLE_MODE)) {
+        // Angle mode is now rescue mode.
+        float errorAngle = 0.0f;
+
+        // -90 Pitch is straight up and +90 is straight down
+        // We are always pitching to "zero" whether up-right or inverted
+        //   but the control direction needed to get to up-right is different than inverted
+        // Determine if we're closer to up-right or inverted by checking for abs(roll attitude) > 90
+        // HF3D TODO:  Evaluate using hysteresis to ensure we don't get "stuck" at one of the inflection points below.
+        if (((attitude.raw[FD_ROLL] - angleTrim->raw[FD_ROLL]) / 10.0f) > 90.0f) {
+            // Rolled right closer to inverted, continue to roll right to inverted (+180 degrees)
+            if (axis == FD_PITCH) {
+                errorAngle = 0.0f + ((attitude.raw[axis] - angleTrim->raw[axis]) / 10.0f);
+            } else if (axis == FD_ROLL) {
+                errorAngle = 180.0f - ((attitude.raw[axis] - angleTrim->raw[axis]) / 10.0f);
+            }
+        } else if (((attitude.raw[FD_ROLL] - angleTrim->raw[FD_ROLL]) / 10.0f) < -90.0f) {    
+            // Rolled left closer to inverted, continue to roll left to inverted (-180 degrees)
+            if (axis == FD_PITCH) {
+                errorAngle = 0.0f + ((attitude.raw[axis] - angleTrim->raw[axis]) / 10.0f);
+            } else if (axis == FD_ROLL) {
+                errorAngle = -180.0f - ((attitude.raw[axis] - angleTrim->raw[axis]) / 10.0f);
+            }
+        } else {
+            // We're rolled left or right between -90 and 90, and thus are closer to up-right (0 degrees aka skids down)
+            if (axis == FD_PITCH) {
+                errorAngle = 0.0f - ((attitude.raw[axis] - angleTrim->raw[axis]) / 10.0f);
+            } else if (axis == FD_ROLL) {
+                errorAngle = 0.0f - ((attitude.raw[axis] - angleTrim->raw[axis]) / 10.0f);
+            }
+        }
+        // NOTE:  If you want to level to only up-right, it would probably be best to just level inverted and
+        //   then flip to upright later on.
+        //   But if you really can only level to up-right (no negative collective avaiable), then it's probably
+        //     best to flip use the pitch direction logic above but just always roll back to up-right.
+        //   That way you will be putting in the correct pitch direction while you're inverted also.  Otherwise
+        //     you will be putting in the wrong pitch correction during the time you're inverted.  Not good, especially
+        //     since "roll" gets wonky near straight up/down.
+        currentPidSetpoint = errorAngle * levelGain;   
+        return currentPidSetpoint;
+
     } else {
-        // HORIZON mode - mix of ANGLE and ACRO modes
-        // mix in errorAngle to currentPidSetpoint to add a little auto-level feel
-        const float horizonLevelStrength = calcHorizonLevelStrength();
-        currentPidSetpoint = currentPidSetpoint + (errorAngle * horizonGain * horizonLevelStrength);
+        // Horizon and GPS Rescue modes
+        // calculate error angle and limit the angle to the max inclination
+        // rcDeflection is in range [-1.0, 1.0]
+        float angle = pidProfile->levelAngleLimit * getRcDeflection(axis);
+
+        // HF3D TODO:  Think about fixing GPS rescue for level/inverted rescue... probably just need to only make it worth it non-inverted rescue
+#ifdef USE_GPS_RESCUE
+        angle += gpsRescueAngle[axis] / 100; // ANGLE IS IN CENTIDEGREES
+#endif
+        angle = constrainf(angle, -pidProfile->levelAngleLimit, pidProfile->levelAngleLimit);
+
+        const float errorAngle = angle - ((attitude.raw[axis] - angleTrim->raw[axis]) / 10.0f);
+
+        if (FLIGHT_MODE(GPS_RESCUE_MODE)) {
+            // ANGLE mode - control is angle based
+            currentPidSetpoint = errorAngle * levelGain;
+        } else {
+            // HORIZON mode - mix of ANGLE and ACRO modes
+            // mix in errorAngle to currentPidSetpoint to add a little auto-level feel
+            const float horizonLevelStrength = calcHorizonLevelStrength();
+            currentPidSetpoint = currentPidSetpoint + (errorAngle * horizonGain * horizonLevelStrength);
+        }
+        
+        return currentPidSetpoint;
     }
-    return currentPidSetpoint;
 }
 
-static timeUs_t crashDetectedAtUs;
+/* static timeUs_t crashDetectedAtUs;
 
 static void handleCrashRecovery(
     const pidCrashRecovery_e crash_recovery, const rollAndPitchTrims_t *angleTrim,
@@ -894,9 +974,9 @@ static void handleCrashRecovery(
             }
         }
     }
-}
+} */
 
-static void detectAndSetCrashRecovery(
+/* static void detectAndSetCrashRecovery(
     const pidCrashRecovery_e crash_recovery, const int axis,
     const timeUs_t currentTimeUs, const float delta, const float errorRate)
 {
@@ -926,7 +1006,7 @@ static void detectAndSetCrashRecovery(
             BEEP_OFF;
         }
     }
-}
+} */
 #endif // USE_ACC
 
 #ifdef USE_ACRO_TRAINER
@@ -1029,6 +1109,27 @@ static void rotateVector(float v[XYZ_AXIS_COUNT], float rotation[XYZ_AXIS_COUNT]
     }
 }
 
+// Iterm Rotation:  Rotate the current iTerm vector properly as the craft rotates on other axes   (Pirouette Compensation)
+// HF3D TODO:  Evaluate applicability of full iTerm rotation including Yaw axis.  Unsure if appropriate for helicopter use.
+//      ArduCopter Piro Comp = Rotate integrator terms on X & Y axis based on pirouette rotation rate around the Z axis
+//      Goal is to keep the swashplate tilted in the original direction of travel as the heli pirouettes
+//      They do not rotate iTerm from the Z axis.
+// HF3D TODO:  What is the lag from calculation of PID components to the actuation of the servos / change in blade pitch during fast rotations?
+//      If the delay is significant, will the heli be in a slightly different z-axis orientation when the control output impacts flight?
+//      Should look-forward prediction be used to rotate the error compensation to where it will actually occur in time for all PID gains on Roll & Pitch axis?
+//      500 deg/s = 1 degree of rotation in 2ms.   dRonin measured response times are ~20ms.  So 10 degrees of rotation worst case?
+//      2000rpm headspeed = 33Hz rotation of blades, and gyroscopic precession means that inputs take 90-degrees of rotation to occur
+//        So worst case is that input determined while blade is at the point it needs to be controlled, rotates 90 degrees where CCPM mixing happens, then pitches 90 degrees later.
+//        Total lag of 180-degrees of rotation worst case = 15ms @ 2000rpm   (After servos have been commanded and started to actually move)
+
+//   Absolute control was made to address the same attitude issues as iterm_rotation, but without some of the downsides.
+//   Absolute Control continuously measures the error of the quads path over stick input, properly rotated into the quads coordinate
+//     system, and mixes a correction proportional to that error into the setpoint.  It's as if you noticed every tiny attitude 
+//     error the quad incurs and provided an instantaneous correction on your TX.  The result is significantly better tracking
+//     to sticks, particularly during rotations involving yaw and other difficult situations like throttle blips.
+//   Absolute Control will likely eventually replace iterm_rotation, but it is not yet enabled by default.
+
+// YOU SHOULD NOT ENABLE ABSOLUTE CONTROL AND ITERM ROTATION AT THE SAME TIME!
 STATIC_UNIT_TESTED void rotateItermAndAxisError()
 {
     if (itermRotation
@@ -1039,19 +1140,25 @@ STATIC_UNIT_TESTED void rotateItermAndAxisError()
         const float gyroToAngle = dT * RAD;
         float rotationRads[XYZ_AXIS_COUNT];
         for (int i = FD_ROLL; i <= FD_YAW; i++) {
+            // convert the deg/s rotation rate sensed by the gyro into the total radians of angle change during the last time step
             rotationRads[i] = gyro.gyroADCf[i] * gyroToAngle;
         }
 #if defined(USE_ABSOLUTE_CONTROL)
         if (acGain > 0 || debugMode == DEBUG_AC_ERROR) {
+            // Rotate the calculated absolute control error for each axis based on the 3d rotation sensed by the gryo during the last time step
             rotateVector(axisError, rotationRads);
         }
 #endif
+        // itermRotation not to be used with absolute control
         if (itermRotation) {
             float v[XYZ_AXIS_COUNT];
+            // Grab the old iTerm for each axis
             for (int i = 0; i < XYZ_AXIS_COUNT; i++) {
                 v[i] = pidData[i].I;
             }
+            // Rotate the iTerm among each axis based on the 3d rotation sensed by the gyro during the last time step
             rotateVector(v, rotationRads );
+            // Overwrite the old iTerms with the rotated iTerms
             for (int i = 0; i < XYZ_AXIS_COUNT; i++) {
                 pidData[i].I = v[i];
             }
@@ -1083,19 +1190,47 @@ float FAST_CODE applyRcSmoothingDerivativeFilter(int axis, float pidSetpointDelt
 }
 #endif // USE_RC_SMOOTHING_FILTER
 
+
+//  YOU SHOULD NOT ENABLE ABSOLUTE CONTROL AND ITERM ROTATION AT THE SAME TIME!
+//    HF3D TODO:  At least not until I make them compatible with each other.  :)
+//  Absolute Control needs to be used with iTermRelax to avoid bounce-backs due to the latency between stick movement and quad response.
+//    iTermRelax will then suspend AbsoluteControl error accumulation as well during quick moves.  Finally, AbsoluteControl only kicks in
+//    once the throttle minimum for airmode activation is exceeded to avoid undue corrections on the ground.
+//  Absolute control was made to address the same attitude issues as iterm_rotation, but without some of the downsides.
+//  Absolute Control continuously measures the error of the quads orientation versus stick input, properly rotated into the quads coordinate
+//     system, and mixes a correction proportional to that error into the setpoint.  It's as if you noticed every tiny attitude 
+//     error the quad incurs and provided an instantaneous correction on your TX.  The result is significantly better tracking
+//     to sticks, particularly during rotations involving yaw and other difficult situations like throttle blips.
 #if defined(USE_ITERM_RELAX)
 #if defined(USE_ABSOLUTE_CONTROL)
 STATIC_UNIT_TESTED void applyAbsoluteControl(const int axis, const float gyroRate, float *currentPidSetpoint, float *itermErrorRate)
 {
     if (acGain > 0 || debugMode == DEBUG_AC_ERROR) {
+        // Apply low-pass filter that was initialized with the pidProfile->abs_control_cutoff frequency to the roll rate command on this axis
         const float setpointLpf = pt1FilterApply(&acLpf[axis], *currentPidSetpoint);
+        // Create high-pass filter by subtracting the commanded roll rate from the low-pass filtered version of itself
         const float setpointHpf = fabsf(*currentPidSetpoint - setpointLpf);
         float acErrorRate = 0;
+        
+        // NOTE:  This function runs on EACH AXIS INDEPENDENTLY.
+        //   Even though one axis may have a fast stick movement, the other two axes may not.
+        //   The other two axes will have full absolute control correction applied to them.
+        
+        // Create window around the low-pass filtered signal value
+        //   No change in stick position ==> Lpf = commanded rate, Hpf = 0
+        //      So, no stick movement = no window.  The window collapses to just the commanded rate on that axis.
+        //   Fast stick movement ==>  Lpf = smoothed command rate, 1>Hpf>0
+        // Note:  Commanded rate could also be a result of self-leveling or other modes
+        // If roll rate sensed by Gyro is inside a window around the user's commanded setpoint, 
+        //   then we'll accumulate the full error.
         const float gmaxac = setpointLpf + 2 * setpointHpf;
         const float gminac = setpointLpf - 2 * setpointHpf;
+        // Check to see if the roll rate sensed by the gyro is within the window of roll rates we created
         if (gyroRate >= gminac && gyroRate <= gmaxac) {
             const float acErrorRate1 = gmaxac - gyroRate;
             const float acErrorRate2 = gminac - gyroRate;
+            // axisError is initialized to zero with pidInit and is only used by Absolute Control to accumulate error for each axis
+            // Note:  axisError has already been compensated for the rotation of the aircraft that occurred during the last timestep dT
             if (acErrorRate1 * axisError[axis] < 0) {
                 acErrorRate = acErrorRate1;
             } else {
@@ -1105,14 +1240,25 @@ STATIC_UNIT_TESTED void applyAbsoluteControl(const int axis, const float gyroRat
                 acErrorRate = -axisError[axis] * pidFrequency;
             }
         } else {
+            // Roll rate sensed by gyro was outside of the window around the user's commanded Setpoint
+            // Set the absolute control error rate to the maximum or minimum edges of the window and subtract the actual gyro rate
+            // If no change in stick position, then this will simply be rcCommandRate - gyroRate   (so just the angle rate error)
             acErrorRate = (gyroRate > gmaxac ? gmaxac : gminac ) - gyroRate;
         }
 
-        if (isAirmodeActivated()) {
+        // Check to ensure we are spooled up at a reasonable level
+        if (isHeliSpooledUp()) {
+            // Integrate the angle rate error, which gives us the accumulated angle error for this axis
+            //  Limit the total angle error to the range defined by pidProfile->abs_control_error_limit
             axisError[axis] = constrainf(axisError[axis] + acErrorRate * dT,
                 -acErrorLimit, acErrorLimit);
+            // Apply a proportional gain (abs_control_gain) to get a desired amount of correction
+            //  Limit the total correction to the range defined by pidProfile->abs_control_limit
             const float acCorrection = constrainf(axisError[axis] * acGain, -acLimit, acLimit);
+            // Manipulate the commanded roll rate on this axis by adding in the absolute control correction
             *currentPidSetpoint += acCorrection;
+            // iTermErrorRate = currentPidSetpoint - gyroRate, but then is manipulated by iTermRelax to prevent wind-up during fast stick movements
+            // Manipulate the iTerm Error Rate on this axis by adding in the absolute control correction
             *itermErrorRate += acCorrection;
             DEBUG_SET(DEBUG_AC_CORRECTION, axis, lrintf(acCorrection * 10));
             if (axis == FD_ROLL) {
@@ -1124,11 +1270,51 @@ STATIC_UNIT_TESTED void applyAbsoluteControl(const int axis, const float gyroRat
 }
 #endif
 
+// Absolute Control needs to be used with iTermRelax to avoid bounce-backs due to the latency between stick movement and quad response.
+// iTerm Relax:     https://www.youtube.com/watch?v=VhBL5u_g2LQ
+//                  https://www.youtube.com/watch?v=QfiGTG5LfCk
+//  iTerm accumulates error over the time (it looks into the past) and applies a correction for steady-state error
+//  iTerm Relax accounts for the fact that fast rotation of the aircraft always has a slight lag versus the commanded rotation
+//  This mechanical lag causes the iTerm to wind up over the course of a fast maneuver, which causes "bounceback" 
+//  iTerm Relax prevents iTerm from growing very fast during fast accelerations of the control stick.
+//    This means that the iTerm will not wind up during those "transition" periods at the beginning or the end of a movement of the control stick.
+//  When the control stick is in a fixed position iTerm Relax will not impact the growth of iTerm.
+
+// The lower the cutoff frequency the more that iTerm Relax will limit the change of iTerm during stick accelerations
+//   The higher the cutoff frequency the shorter the window of time will be where the limitation is occuring
+//   Default is 20Hz which is good for 5" miniquads.  Bigger quads can probably be lowered to 15Hz.  Requires testing.
+
+// RP = Roll, Pitch axis only
+// RPY = Roll, Pitch, Yaw
+// RP_INC = Inc versions are only limiting the GROWTH of the iterm, while lowering of iTerm is not constrained
+// RPY_INC = Inc versions are only limiting the GROWTH of the iterm, while lowering of iTerm is not constrained
+// Setpoint mode applies a high-pass filter to RC input, resulting in a value that gets higher whenever the sticks are moved quickly.
+//   When the rate of change is zero (sticks are not moving), iTerm accumulation is normal.  
+//   Accumulation is then attenuated linearly as the stick movement approaches a threshold.  Above threshold, no iTerm accumulation occurs at all.
+//   Tracks the actual movement on your stick, more suited for racer where smoothness is not required 
+//   Setpoint is when you want the craft to go exactly where you told it to go
+// Gyro mode uses a high-pass filter based on rate of change of stick movement, and uses this to create a window either side of the gyro value inside
+//   which the quad should be tracking.  While inside the window, no iTerm accumulation occurs.  If the sticks are held still, the window compresses
+//   back to nothing, and iTerm accumulation becomes normal again.
+//   Gyro algorithm gives you more freestyle feel where result will be slightly smoother flight
+
+
+// With iTerm relax we can push iTerm much higher than before without unfortunately rollback/bounceback
+//    Up to 50% higher iTerm can work when using iTermRelax.
+// HF3D TODO:  Evaluate iTerm relax cutoff frequency for helicopter use
+//   (stick - stick lpf) = stick hpf, nice explanation Pawel. Also for planes ? I know current implementation for planes.
+//   "No, planes will still have current Iterm limiting in iNav, we are not changing that. 
+//      Planes are not that agile as drones and it would require very low cutoff frequency for Iterm relax to work"
 STATIC_UNIT_TESTED void applyItermRelax(const int axis, const float iterm,
     const float gyroRate, float *itermErrorRate, float *currentPidSetpoint)
 {
+    // Apply low-pass filter that was initialized with the pidProfile->iterm_relax_cutoff frequency to the roll rate command on this axis
     const float setpointLpf = pt1FilterApply(&windupLpf[axis], *currentPidSetpoint);
+    // High pass filter = original signal minus the low-pass filtered version of that signal
     const float setpointHpf = fabsf(*currentPidSetpoint - setpointLpf);
+    //   No change in stick position ==> Lpf = commanded rate, Hpf = 0
+    //   Fast stick movement ==>  Lpf = smoothed command rate, 1>Hpf>0
+    // Note:  Commanded rate could also be a result of self-leveling or other modes
 
     if (itermRelax) {
         if (axis < FD_YAW || itermRelax == ITERM_RELAX_RPY || itermRelax == ITERM_RELAX_RPY_INC) {
@@ -1136,10 +1322,13 @@ STATIC_UNIT_TESTED void applyItermRelax(const int axis, const float iterm,
             const bool isDecreasingI =
                 ((iterm > 0) && (*itermErrorRate < 0)) || ((iterm < 0) && (*itermErrorRate > 0));
             if ((itermRelax >= ITERM_RELAX_RP_INC) && isDecreasingI) {
-                // Do Nothing, use the precalculed itermErrorRate
+                // Do Nothing and allow iTerm to decrease normally.  Use the precalculed itermErrorRate
             } else if (itermRelaxType == ITERM_RELAX_SETPOINT) {
+                // Change iTerm accumulation factor based only on the speed of the stick movement
                 *itermErrorRate *= itermRelaxFactor;
             } else if (itermRelaxType == ITERM_RELAX_GYRO ) {
+                // Accumulate iTerm if our gyro movement rate is within a window defined by our stick movement rate
+                // Otherwise don't allow iTerm accumulation if the aircraft isn't tracking the commanded roll rate yet.
                 *itermErrorRate = fapplyDeadband(setpointLpf - gyroRate, setpointHpf);
             } else {
                 *itermErrorRate = 0.0f;
@@ -1153,11 +1342,12 @@ STATIC_UNIT_TESTED void applyItermRelax(const int axis, const float iterm,
         }
 
 #if defined(USE_ABSOLUTE_CONTROL)
+        // Manipulate currentPidSetpoint and iTermErrorRate
         applyAbsoluteControl(axis, gyroRate, currentPidSetpoint, itermErrorRate);
 #endif
     }
 }
-#endif
+#endif  // end USE_ITERM_RELAX
 
 #ifdef USE_AIRMODE_LPF
 void pidUpdateAirmodeLpf(float currentOffset)
@@ -1187,6 +1377,12 @@ float pidGetAirmodeThrottleOffset()
 
 // Betaflight pid controller, which will be maintained in the future with additional features specialised for current (mini) multirotor usage.
 // Based on 2DOF reference design (matlab)
+// Called from subTaskPidController() in pid.c
+//   Runs at equal to or slower than the gyro loop update frequency
+static FAST_RAM_ZERO_INIT float yawPidSetpoint;         // HF3D:  Hold the previous corrected Yaw setpoint for flat piro compensation
+static FAST_RAM_ZERO_INIT float collectiveStickPercent;        // HF3D
+static FAST_RAM_ZERO_INIT float collectiveStickLPF;            // HF3D:  Collective stick values
+static FAST_RAM_ZERO_INIT float collectiveStickHPF;
 void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTimeUs)
 {
     static float previousGyroRateDterm[XYZ_AXIS_COUNT];
@@ -1202,6 +1398,7 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
     const float tpaFactor = getThrottlePIDAttenuation();
 
 #if defined(USE_ACC)
+    // Get user-set accelerometer trims to trim the leveling modes
     const rollAndPitchTrims_t *angleTrim = &accelerometerConfig()->accelerometerTrims;
 #else
     UNUSED(pidProfile);
@@ -1215,6 +1412,7 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
 #endif
 
 #ifdef USE_YAW_SPIN_RECOVERY
+    // Check for ICM gyro overflow "to the moon" yaw spin
     const bool yawSpinActive = gyroYawSpinDetected();
 #endif
 
@@ -1235,20 +1433,21 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
     gpsRescuePreviousState = gpsRescueIsActive;
 #endif
 
-    // Dynamic i component,
+/*     // Dynamic i component,
     if ((antiGravityMode == ANTI_GRAVITY_SMOOTH) && antiGravityEnabled) {
         itermAccelerator = 1 + fabsf(antiGravityThrottleHpf) * 0.01f * (itermAcceleratorGain - 1000);
         DEBUG_SET(DEBUG_ANTI_GRAVITY, 1, lrintf(antiGravityThrottleHpf * 1000));
     }
-    DEBUG_SET(DEBUG_ANTI_GRAVITY, 0, lrintf(itermAccelerator * 1000));
+    DEBUG_SET(DEBUG_ANTI_GRAVITY, 0, lrintf(itermAccelerator * 1000)); */
 
     // gradually scale back integration when above windup point
-    float dynCi = dT * itermAccelerator;
-    if (itermWindupPointInv > 1.0f) {
-        dynCi *= constrainf((1.0f - getMotorMixRange()) * itermWindupPointInv, 0.0f, 1.0f);
-    }
+    //float dynCi = dT * itermAccelerator;                   // itermAccelerator = 1.0f when antigravity disabled
+    float dynCi = dT;
+    // if (itermWindupPointInv > 1.0f) {                      // disabled if iterm_windup = 100, so dynCi = dT
+        // dynCi *= constrainf((1.0f - getMotorMixRange()) * itermWindupPointInv, 0.0f, 1.0f);
+    // }
 
-    // Precalculate gyro deta for D-term here, this allows loop unrolling
+    // Precalculate gyro data for D-term here, this allows loop unrolling
     float gyroRateDterm[XYZ_AXIS_COUNT];
     for (int axis = FD_ROLL; axis <= FD_YAW; ++axis) {
         gyroRateDterm[axis] = gyro.gyroADCf[axis];
@@ -1260,6 +1459,8 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
         gyroRateDterm[axis] = dtermLowpass2ApplyFn((filter_t *) &dtermLowpass2[axis], gyroRateDterm[axis]);
     }
 
+    // HF3D:  iTermRotation acts as FFF Pirouette Compensation on a heli.
+    //   Will not work properly unless the hover roll compensation is outside of the roll integral in the PID controller.
     rotateItermAndAxisError();
 #ifdef USE_RPM_FILTER
     rpmFilterUpdate();
@@ -1273,9 +1474,16 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
     }
 #endif
 
+    // HF3D TODO:  Roll/Pitch PID compensation based on main rotor RPM
+    //  Blade thrust varies with RPM^2.  Servos should need to move further at lower headspeeds to offset a given rotational error?
+    //  Compensating PID gains with RPM (possibly throttle as a backup) might be helpful in reducing the need for banks of gains for each headspeed.
+    //  Yaw axis PID RPM compensation would depend on whether it was a motor driven or variable pitch tail?
+
     // ----------PID controller----------
     for (int axis = FD_ROLL; axis <= FD_YAW; ++axis) {
 
+        // Get the user's roll rate command on this axis after expo and other rate modifications have been made
+        //  Units are deg/s... maximum set in profile, default max rate is 1998 deg/s
         float currentPidSetpoint = getSetpointRate(axis);
         if (maxVelocity[axis]) {
             currentPidSetpoint = accelerationLimit(axis, currentPidSetpoint);
@@ -1284,6 +1492,9 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
 #if defined(USE_ACC)
         if (levelModeActive && (axis != FD_YAW)) {
             currentPidSetpoint = pidLevel(axis, pidProfile, angleTrim, currentPidSetpoint);
+        } else if (FLIGHT_MODE(ANGLE_MODE) && (axis == FD_YAW)) {
+            // HF3D:  Don't allow user to give yaw input while rescue (angle) mode corrections are occuring
+            currentPidSetpoint = 0.0f;
         }
 #endif
 
@@ -1301,15 +1512,25 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
         }
 #endif // USE_YAW_SPIN_RECOVERY
 
+        // HF3D TODO:  Flat pirouette compensation
+        //  Compensate for the fact that the main shaft axis is not aligned with the Z axis due to the roll tilt required to compensate for tail blade thrust
+        //  Create a wobble of the main shaft axis around the Z axis by adding roll and pitch commands proportional to the yaw rotation rate
+        if (axis == FD_ROLL && throttleBoost > 1.0f) {
+            // HF3D TODO:  Change roll compensation sign based on main motor rotation direction (tail thrust direction)
+            currentPidSetpoint += fabsf(yawPidSetpoint) / throttleBoost;    // Roll compensation direction is same regardless of yaw direction
+        } else if (axis == FD_PITCH && throttleBoost > 1.0f) {
+            currentPidSetpoint += yawPidSetpoint / throttleBoost;          // Pitch compensation direction depends on yaw direction
+        }
+
         // -----calculate error rate
         const float gyroRate = gyro.gyroADCf[axis]; // Process variable from gyro output in deg/sec
         float errorRate = currentPidSetpoint - gyroRate; // r - y
-#if defined(USE_ACC)
+/* #if defined(USE_ACC)
         handleCrashRecovery(
             pidProfile->crash_recovery, angleTrim, axis, currentTimeUs, gyroRate,
             &currentPidSetpoint, &errorRate);
 #endif
-
+ */
         const float previousIterm = pidData[axis].I;
         float itermErrorRate = errorRate;
 #ifdef USE_ABSOLUTE_CONTROL
@@ -1318,6 +1539,7 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
 
 #if defined(USE_ITERM_RELAX)
         if (!inCrashRecoveryMode) {
+            // Absolute Control is applied after iTermRelax as part of this function
             applyItermRelax(axis, previousIterm, gyroRate, &itermErrorRate, &currentPidSetpoint);
             errorRate = currentPidSetpoint - gyroRate;
         }
@@ -1325,6 +1547,11 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
 #ifdef USE_ABSOLUTE_CONTROL
         float setpointCorrection = currentPidSetpoint - uncorrectedSetpoint;
 #endif
+
+        // HF3D:  After all setpoint changes are done, get Yaw setpoint for flat pirouette compensation
+        if (axis == FD_YAW) {
+            yawPidSetpoint = currentPidSetpoint;
+        }
 
         // --------low-level gyro-based PID based on 2DOF PID controller. ----------
         // 2-DOF PID controller with optional filter on derivative term.
@@ -1338,7 +1565,20 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
 
         // -----calculate I component
         const float Ki = pidCoefficient[axis].Ki;
+        // dynCi = dT if airmode disabled and iterm_windup = 100
         pidData[axis].I = constrainf(previousIterm + Ki * itermErrorRate * dynCi, -itermLimit, itermLimit);
+        
+        // Decay accumulated error if appropriate
+#define signorzero(x) ((x < 0) ? -1 : (x > 0) ? 1 : 0)
+        if (!isHeliSpooledUp() || pidProfile->error_decay_always) {
+            // Calculate number of degrees to remove from the accumulated error
+            const float decayFactor = pidProfile->error_decay_rate * dT;
+
+            pidData[axis].I -= signorzero(pidData[axis].I) * decayFactor * Ki;
+#if defined(USE_ABSOLUTE_CONTROL)
+            axisError[axis] -= signorzero(axisError[axis]) * decayFactor;
+#endif
+        }
 
         // -----calculate pidSetpointDelta
         float pidSetpointDelta = 0;
@@ -1369,11 +1609,11 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
             const float delta =
                 - (gyroRateDterm[axis] - previousGyroRateDterm[axis]) * pidFrequency;
 
-#if defined(USE_ACC)
+/* #if defined(USE_ACC)
             if (cmpTimeUs(currentTimeUs, levelModeStartTimeUs) > CRASH_RECOVERY_DETECTION_DELAY_US) {
                 detectAndSetCrashRecovery(pidProfile->crash_recovery, axis, currentTimeUs, delta, errorRate);
             }
-#endif
+#endif */
 
             float dMinFactor = 1.0f;
 #if defined(USE_D_MIN)
@@ -1408,21 +1648,103 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
 #endif
 
         // Only enable feedforward for rate mode (flightModeFlag=0 is acro/rate mode)
-        const float feedforwardGain = (flightModeFlags) ? 0.0f : pidCoefficient[axis].Kf;
+        //  HF3D:  Changed this so horizon & angle modes have feedforward also
+        //const float feedforwardGain = (flightModeFlags) ? 0.0f : pidCoefficient[axis].Kf;
+        const float feedforwardGain = pidCoefficient[axis].Kf;
         if (feedforwardGain > 0) {
-            // no transition if feedForwardTransition == 0
-            float transition = feedForwardTransition > 0 ? MIN(1.f, getRcDeflectionAbs(axis) * feedForwardTransition) : 1;
-            float feedForward = feedforwardGain * transition * pidSetpointDelta * pidFrequency;
+            // transition = 1 if feedForwardTransition == 0   (no transition)
+            float transition = feedForwardTransition > 0 ? MIN(1.f, getRcDeflectionAbs(axis) * feedForwardTransition) : 1.0f;
+            // HF3D:  Direct stick feedforward for roll and pitch.  Stick delta feedforward for yaw.
+            // Let's do direct stick feedforward for roll & pitch, and let's AMP IT UP A LOT.
+            // 0.013754 * 90 * 1 * 60 deg/s = 74 output for 100 feedForward gain
+            float feedForward = feedforwardGain * 90.0f * transition * currentPidSetpoint;
+            // Stick delta feedforward for the yaw axis.
+            if (axis == FD_YAW) {
+                feedForward = feedforwardGain * transition * pidSetpointDelta * pidFrequency;    //  Kf * 1 * 20 deg/s * 8000
+            }
 
 #ifdef USE_INTERPOLATED_SP
-            pidData[axis].F = shouldApplyFfLimits(axis) ?
-                applyFfLimit(axis, feedForward, pidCoefficient[axis].Kp, currentPidSetpoint) : feedForward;
+            // HF3D:  Only apply feedforward interpolation limits to the Yaw axis since we're using direct feedforward on the roll and pitch axes.
+            if (axis == FD_YAW) {
+                pidData[axis].F = shouldApplyFfLimits(axis) ?
+                    applyFfLimit(axis, feedForward, pidCoefficient[axis].Kp, currentPidSetpoint) : feedForward;
+            } else {
+               pidData[axis].F = feedForward;
+            }               
 #else
             pidData[axis].F = feedForward;
 #endif
         } else {
             pidData[axis].F = 0;
         }
+        
+         // HF3D:  Calculate tail feedforward precompensation and add it to the pidSum on the Yaw channel
+        if (axis == FD_YAW) {
+            
+            // Calculate absolute value of the percentage of collective stick throw
+            if ((rcCommand[COLLECTIVE] >= 500) || (rcCommand[COLLECTIVE] <= -500)) {
+                collectiveStickPercent = 100.0f;
+            } else {
+                if (rcCommand[COLLECTIVE] >= 0) {
+                    collectiveStickPercent = (rcCommand[COLLECTIVE] * 100.0f) / (PWM_RANGE_MAX - rxConfig()->midrc);
+                } else if (rcCommand[COLLECTIVE] < 0) {
+                    collectiveStickPercent = (rcCommand[COLLECTIVE] * -100.0f) / (rxConfig()->midrc - PWM_RANGE_MIN);
+                }
+            }
+            
+            // Collective pitch impulse feed-forward for the main motor
+            // Run our collectiveStickPercent through a low pass filter
+            // HF3D TODO:  Pulse filter calc should probably be moved to PID?  But it probably shouldn't be a profile setting?
+            collectiveStickLPF = collectiveStickLPF + mixerGetGovCollectivePulseFilterGain() * (collectiveStickPercent - collectiveStickLPF);
+            // Subtract LPF from the original value to get a high pass filter
+            // HPF value will be <60% or so of the collectiveStickPercent, and will be smaller the slower the stick movement is.
+            //  Cutoff frequency determines this action.
+            collectiveStickHPF = collectiveStickPercent - collectiveStickLPF;
+
+            // HF3D TODO:  Negative because of clockwise main rotor spin direction -> CCW body torque on helicopter
+            //   Implement a configuration parameter for rotor rotation direction
+            float tailCollectiveFF = -1.0f * collectiveStickPercent * pidProfile->yawColKf / 100.0f;
+            float tailCollectivePulseFF = -1.0f * collectiveStickHPF * pidProfile->yawColPulseKf / 100.0f;
+            float tailBaseThrust = -1.0f * pidProfile->yawBaseThrust / 10.0f;
+            
+            // HF3D TODO:  Add cyclic feedforward for yaw
+            // float tailCyclicFF = ...
+			
+            // Calculate absolute value of the percentage of cyclic stick throw (both combined... but swash ring is the real issue).
+			float tailCyclicFF = -1.0f * servosGetSwashRingValue() * 100.0f * pidProfile->yawCycKf / 100.0f;
+            
+            // Main motor torque increase from the ESC is proportional to the absolute change in average voltage (NOT percent change in average voltage)
+            //     and it is linear with the amount of change.
+            // Main motor torque will always cause the tail to rotate in in the same direction, so we just need to apply this offset in the correct direction to counter-act that torque.
+            // For CW rotation of the main rotor, the torque will turn the body of the helicopter CCW
+            //   This means the leading edge of the tail blade needs to tip towards the left side of the helicopter to counteract it.
+            //   Yaw stick right = clockwise rotation = tip of tail blade to left = POSITIVE servo values observed on the X3
+            //      NOTE:  Servo values required to obtain a certain direction of change in the tail depends on which side the servo is mounted and if it's a leading or trailing link!!
+            //      It is very important to set the servo reversal configuration up correctly so the servo moves in the same direction as the Preview model!
+            //   Yaw stick right = positive control channel PWM values from the TX also.
+            //   Smix on my rudder channel is setup for -100... so it will take NEGATIVE values in the pidSum to create positive servo movement!
+
+            //   So my collective comp also needs to make positive tail servo values, which means that I need a NEGATIVE adder to the pidSum due to the channel rate reversal.
+            //     But, this should always work for all helis that are also setup correctly, regardless of servo reversal...
+            //     ... as long as it yaws the correct direction to match the Preview model.
+            //     ... and as long as the main motor rotation direction is CW!  CCW rotation will require reversing this and generating POSITIVE pidSum additions!
+            // HF3D TODO:  Add a "main rotor rotation direction" configuration parameter.
+            
+            // HF3D TODO:  Consider adding a delay in here to allow time for other things to occur...
+            //  Tail servo can probably add pitch faster than the swash servos can add collective pitch
+            //   and it's also probably faster than the ESC can add torque to the main motor (for gov impulse)
+            //  But for motor-driven tails the delay may not be needed... depending on how fast the ESC+motor
+            //   can spin up the tail blades relative to the other pieces of the puzzle.
+            
+            // Add our collective feedforward terms into the yaw axis pidSum as long as we don't have a motor driven tail
+            if (getMotorCount() == 1) {
+                pidData[FD_YAW].F += tailCollectiveFF + tailCollectivePulseFF + tailBaseThrust + tailCyclicFF;
+            }
+            // HF3D TODO:  Do some integration of the motor driven tail code here for motorCount == 2...
+            //   But have to be careful, because if main motor throttle goes near zero then we'll never get the tail back if we're
+            //   adding feedforward that doesn't need to be there.  We can't create negative thrust with a motor driven fixed pitch tail.
+                        
+        }       
 
 #ifdef USE_YAW_SPIN_RECOVERY
         if (yawSpinActive) {
@@ -1447,10 +1769,34 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
         {
             pidData[axis].Sum = pidSum;
         }
+        
     }
 
+/*     // HF3D:  PID Delay Compensation
+    //  Allows for higher PID gains since the previous control actions the helicopter hasn't responded to yet are taken into account in the PID controller output
+    // Update the PID sums by subtracting the previous unresponded control inputs from the current PID controller outputs
+    pidData[FD_ROLL].Sum -= delayCompAlpha * delayCompSum[FD_ROLL];
+    pidData[FD_PITCH].Sum -= delayCompAlpha * delayCompSum[FD_PITCH];
+    
+    // Update the delay array values & sums
+    // Subtract the oldest value from the array since it will have caused a response by now
+    delayCompSum[FD_ROLL] -= delayArrayRoll[delayArrayPos];
+    delayCompSum[FD_PITCH] -= delayArrayPitch[delayArrayPos];
+    // Replace the oldest value with the newest value
+    delayArrayRoll[delayArrayPos] = (int16_t) constrainf(pidData[FD_ROLL].Sum, -pidProfile->pidSumLimit, pidProfile->pidSumLimit);
+    delayArrayPitch[delayArrayPos] = (int16_t) constrainf(pidData[FD_PITCH].Sum, -pidProfile->pidSumLimit, pidProfile->pidSumLimit);
+    // Add the newest outputs to the sums
+    delayCompSum[FD_ROLL] += delayArrayRoll[delayArrayPos];
+    delayCompSum[FD_PITCH] += delayArrayPitch[delayArrayPos];
+    // Increment the delay array position pointer
+    delayArrayPos++;
+    if (delayArrayPos >= DELAYLENGTH) {
+        delayArrayPos = 0;    // Reset pointer into array to the beginning
+    } */
+
     // Disable PID control if at zero throttle or if gyro overflow detected
-    // This may look very innefficient, but it is done on purpose to always show real CPU usage as in flight
+    // This may look very inefficient, but it is done on purpose to always show real CPU usage as in flight
+    // HF3D TODO:  We're not really using this right now since we're decaying accumulated error in the main PID loop to handle initial spool-up
     if (!pidStabilisationEnabled || gyroOverflowDetected()) {
         for (int axis = FD_ROLL; axis <= FD_YAW; ++axis) {
             pidData[axis].P = 0;
@@ -1460,9 +1806,12 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
 
             pidData[axis].Sum = 0;
         }
+/*         delayCompSum[FD_ROLL] = 0;
+        delayCompSum[FD_PITCH] = 0; */
     } else if (zeroThrottleItermReset) {
         pidResetIterm();
     }
+    
 }
 
 bool crashRecoveryModeActive(void)
@@ -1482,19 +1831,19 @@ void pidSetAcroTrainerState(bool newState)
 }
 #endif // USE_ACRO_TRAINER
 
-void pidSetAntiGravityState(bool newState)
+/* void pidSetAntiGravityState(bool newState)
 {
     if (newState != antiGravityEnabled) {
         // reset the accelerator on state changes
         itermAccelerator = 1.0f;
     }
     antiGravityEnabled = newState;
-}
+} */
 
-bool pidAntiGravityEnabled(void)
+/* bool pidAntiGravityEnabled(void)
 {
     return antiGravityEnabled;
-}
+} */
 
 #ifdef USE_DYN_LPF
 void dynLpfDTermUpdate(float throttle)
@@ -1533,4 +1882,19 @@ float pidGetDT()
 float pidGetPidFrequency()
 {
     return pidFrequency;
+}
+
+float pidGetCollectiveStickPercent()
+{
+    return collectiveStickPercent;
+}
+
+float pidGetCollectiveStickHPF()
+{
+    return collectiveStickHPF;
+}
+
+uint16_t pidGetRescueCollectiveSetting()
+{
+    return rescueCollective;
 }

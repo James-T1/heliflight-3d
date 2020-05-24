@@ -33,6 +33,9 @@
 #define PWM_RANGE_MAX 2000
 #define PWM_RANGE_MIDDLE (PWM_RANGE_MIN + ((PWM_RANGE_MAX - PWM_RANGE_MIN) / 2))
 
+#define PWM_SERVO_PULSE_MIN   460    // minimum PWM servo output pulse width allowed
+#define PWM_SERVO_PULSE_MAX   2020   // maximum PWM servo output pulse width allowed
+
 #define PWM_PULSE_MIN   750       // minimum PWM pulse width which is considered valid
 #define PWM_PULSE_MAX   2250      // maximum PWM pulse width which is considered valid
 
@@ -119,7 +122,7 @@ typedef struct rxChannelRangeConfig_s {
     uint16_t max;
 } rxChannelRangeConfig_t;
 
-PG_DECLARE_ARRAY(rxChannelRangeConfig_t, NON_AUX_CHANNEL_COUNT, rxChannelRangeConfigs);
+PG_DECLARE_ARRAY(rxChannelRangeConfig_t, NON_AUX_CHANNEL_COUNT+1, rxChannelRangeConfigs);    // HF3D:  Updated to allow setting RXRANGE for AUX1 (collective)
 
 struct rxRuntimeState_s;
 typedef uint16_t (*rcReadRawDataFnPtr)(const struct rxRuntimeState_s *rxRuntimeState, uint8_t chan); // used by receiver driver to return channel data

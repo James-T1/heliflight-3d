@@ -81,7 +81,15 @@ typedef struct mixerConfig_s {
     uint8_t mixerMode;
     bool yaw_motors_reversed;
     uint8_t crashflip_motor_percent;
-    uint8_t crashflip_expo;
+    uint16_t gov_max_headspeed;
+    uint16_t gov_gear_ratio;
+    uint16_t gov_p_gain;
+    uint16_t gov_i_gain;
+    uint16_t gov_cyclic_ff_gain;
+    uint16_t gov_collective_ff_gain;
+    uint16_t gov_collective_ff_impulse_gain;
+    uint16_t gov_collective_ff_impulse_freq;
+    uint16_t spoolup_time;
 } mixerConfig_t;
 
 PG_DECLARE(mixerConfig_t, mixerConfig);
@@ -115,3 +123,8 @@ void mixerSetThrottleAngleCorrection(int correctionValue);
 float mixerGetThrottle(void);
 mixerMode_e getMixerMode(void);
 bool isFixedWing(void);
+
+// HF3D
+uint8_t isHeliSpooledUp(void);
+float mixerGetGovGearRatio(void);
+float mixerGetGovCollectivePulseFilterGain(void);

@@ -48,6 +48,8 @@ extern uint32_t sectionTimes[2][4];
 
 #endif
 
+// Please ensure that these names are aligned with the values defined in 'debug.c'
+// These values must also be in sync with Betaflight Configurator and Blackbox Explorer
 typedef enum {
     DEBUG_NONE,
     DEBUG_CYCLETIME,
@@ -84,6 +86,7 @@ typedef enum {
     DEBUG_SDIO,
     DEBUG_CURRENT_SENSOR,
     DEBUG_USB,
+    DEBUG_SMARTAUDIO,           // HF3D: Using this for governor, to change name should update Configurator and BB Explorer debug lists to keep them in sync
     DEBUG_RTH,
     DEBUG_ITERM_RELAX,
     DEBUG_ACRO_TRAINER,

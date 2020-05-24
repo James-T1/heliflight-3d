@@ -562,6 +562,9 @@ static void imuCalculateEstimatedAttitude(timeUs_t currentTimeUs)
 #endif
 }
 
+// Throttle Angle Correction is a feature that helps maintain altitude when pitching or rolling
+//   by slightly increasing throttle when a quad is tilting off of level
+//   https://github.com/betaflight/betaflight/issues/6212
 static int calculateThrottleAngleCorrection(void)
 {
     /*

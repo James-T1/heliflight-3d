@@ -227,7 +227,7 @@ void voltageMeterESCRefresh(void)
 #ifdef USE_ESC_SENSOR
     escSensorData_t *escData = getEscSensorData(ESC_SENSOR_COMBINED);
     if (escData) {
-        voltageMeterESCState.voltageUnfiltered = escData->dataAge <= ESC_BATTERY_AGE_MAX ? escData->voltage : 0;
+        voltageMeterESCState.voltageUnfiltered = escData->voltage;      // HF3D:  Data validity is now checked in esc_sensor.c
         voltageMeterESCState.voltageFiltered = pt1FilterApply(&voltageMeterESCState.filter, voltageMeterESCState.voltageUnfiltered);
     }
 #endif
@@ -241,7 +241,7 @@ void voltageMeterESCReadMotor(uint8_t motorNumber, voltageMeter_t *voltageMeter)
 #else
     escSensorData_t *escData = getEscSensorData(motorNumber);
     if (escData) {
-        voltageMeter->unfiltered = escData->dataAge <= ESC_BATTERY_AGE_MAX ? escData->voltage : 0;
+        voltageMeter->unfiltered = escData->voltage;       // HF3D:  Data validity is now checked in esc_sensor.c
         voltageMeter->filtered = voltageMeter->unfiltered; // no filtering for ESC motors currently.
     } else {
         voltageMeterReset(voltageMeter);

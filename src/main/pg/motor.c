@@ -72,7 +72,7 @@ void pgResetFn_motorConfig(motorConfig_t *motorConfig)
     }
 #endif
     
-    motorConfig->motorPoleCount = 14;   // Most brushes motors that we use are 14 poles
+    motorConfig->motorPoleCount = 14;   // Most brushless motors that we use for 5" miniquads are 14 poles
 
 #ifdef USE_DSHOT_BITBANG
     motorConfig->dev.useDshotBitbang = DSHOT_BITBANG_DEFAULT;

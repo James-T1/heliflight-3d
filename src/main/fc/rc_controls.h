@@ -40,7 +40,8 @@ typedef enum rc_alias {
     AUX8
 } rc_alias_e;
 
-#define PRIMARY_CHANNEL_COUNT (THROTTLE + 1)
+#define COLLECTIVE 4                                // HF3D:  Add COLLECTIVE define on top of the existing AUX1 define
+#define PRIMARY_CHANNEL_COUNT (COLLECTIVE + 1)      // HF3D:  Updated to allow AUX1/Collective channel smoothing
 
 typedef enum {
     THROTTLE_LOW = 0,
@@ -103,7 +104,7 @@ typedef enum {
 
 #define CONTROL_RATE_CONFIG_TPA_MAX              100
 
-extern float rcCommand[4];
+extern float rcCommand[5];
 
 typedef struct rcSmoothingFilterTraining_s {
     float sum;
@@ -119,7 +120,7 @@ typedef union rcSmoothingFilterTypes_u {
 
 typedef struct rcSmoothingFilter_s {
     bool filterInitialized;
-    rcSmoothingFilterTypes_t filter[4];
+    rcSmoothingFilterTypes_t filter[5];
     rcSmoothingInputFilter_e inputFilterType;
     uint8_t inputCutoffSetting;
     uint16_t inputCutoffFrequency;

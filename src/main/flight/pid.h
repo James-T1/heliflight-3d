@@ -180,6 +180,16 @@ typedef struct pidProfile_s {
     uint8_t ff_max_rate_limit;              // Maximum setpoint rate percentage for FF
     uint8_t ff_spike_limit;                 // FF stick extrapolation lookahead period in ms
     uint8_t ff_smooth_factor;               // Amount of smoothing for interpolated FF steps
+    
+    // HF3D parameters
+    uint16_t yawColKf;                      // Feedforward for collective into Yaw
+    uint16_t yawColPulseKf;                 // Feedforward for collective impulse into Yaw
+    uint16_t yawCycKf;                      // Feedforward for cyclic into Yaw
+    uint16_t yawBaseThrust;                 // Base thrust for the tail
+    uint16_t rescue_collective;             // Collective pitch command when rescue is fully upright
+    uint8_t error_decay_always;             // Always decay accumulated I term and Abs Control error?
+    uint8_t error_decay_rate;               // Rate to decay accumulated error in deg/s
+    
 } pidProfile_t;
 
 PG_DECLARE_ARRAY(pidProfile_t, PID_PROFILE_COUNT, pidProfiles);
@@ -216,7 +226,7 @@ extern pt1Filter_t throttleLpf;
 
 void pidResetIterm(void);
 void pidStabilisationState(pidStabilisationState_e pidControllerState);
-void pidSetItermAccelerator(float newItermAccelerator);
+//void pidSetItermAccelerator(float newItermAccelerator);
 void pidInitFilters(const pidProfile_t *pidProfile);
 void pidInitConfig(const pidProfile_t *pidProfile);
 void pidInit(const pidProfile_t *pidProfile);
@@ -226,14 +236,13 @@ void pidAcroTrainerInit(void);
 void pidSetAcroTrainerState(bool newState);
 void pidInitSetpointDerivativeLpf(uint16_t filterCutoff, uint8_t debugAxis, uint8_t filterType);
 void pidUpdateSetpointDerivativeLpf(uint16_t filterCutoff);
-void pidUpdateAntiGravityThrottleFilter(float throttle);
-bool pidOsdAntiGravityActive(void);
-bool pidOsdAntiGravityMode(void);
-void pidSetAntiGravityState(bool newState);
-bool pidAntiGravityEnabled(void);
+//void pidUpdateAntiGravityThrottleFilter(float throttle);
+//bool pidOsdAntiGravityActive(void);
+//bool pidOsdAntiGravityMode(void);
+//void pidSetAntiGravityState(bool newState);
+//bool pidAntiGravityEnabled(void);
 #ifdef USE_THRUST_LINEARIZATION
 float pidApplyThrustLinearization(float motorValue);
-float pidCompensateThrustLinearization(float throttle);
 #endif
 #ifdef USE_AIRMODE_LPF
 void pidUpdateAirmodeLpf(float currentOffset);
@@ -259,3 +268,7 @@ float pidGetPidFrequency();
 float pidGetFfBoostFactor();
 float pidGetFfSmoothFactor();
 float pidGetSpikeLimitInverse();
+// HF3D
+float pidGetCollectiveStickPercent();
+float pidGetCollectiveStickHPF();
+uint16_t pidGetRescueCollectiveSetting();

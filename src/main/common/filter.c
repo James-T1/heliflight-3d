@@ -61,6 +61,7 @@ void pt1FilterUpdateCutoff(pt1Filter_t *filter, float k)
     filter->k = k;
 }
 
+// Calculate PT1 low-pass filter on supplied input data and filter address
 FAST_CODE float pt1FilterApply(pt1Filter_t *filter, float input)
 {
     filter->state = filter->state + filter->k * (input - filter->state);

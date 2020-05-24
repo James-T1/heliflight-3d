@@ -703,18 +703,31 @@ bool processRx(timeUs_t currentTimeUs)
         airmodeIsActivated = false;
     }
 
+    // Disable PID control if at zero throttle or if gyro overflow detected
     /* In airmode iterm should be prevented to grow when Low thottle and Roll + Pitch Centered.
      This is needed to prevent iterm winding on the ground, but keep full stabilisation on 0 throttle while in air */
-    if (throttleStatus == THROTTLE_LOW && !airmodeIsActivated) {
-        pidSetItermReset(true);
-        if (currentPidProfile->pidAtMinThrottle)
-            pidStabilisationState(PID_STABILISATION_ON);
+    //Old code w/airMode:   if (throttleStatus == THROTTLE_LOW && !airmodeIsActivated) {
+    // HF3D:  Get rid of iTerms when throttle is off?  Probably not a good idea if we want control during autorotations??
+    //if (throttleStatus == THROTTLE_LOW || !isHeliSpooledUp()) {
+    /*
+    if (!isHeliSpooledUp()) {
+        pidSetItermReset(true);                                // Reset all I terms and absolute control accumulated error
+        if (currentPidProfile->pidAtMinThrottle)               // Defaults setting is true
+            pidStabilisationState(PID_STABILISATION_ON);       // Enable stabilization for the aircraft
         else
-            pidStabilisationState(PID_STABILISATION_OFF);
+            pidStabilisationState(PID_STABILISATION_OFF);      // Disable stabilization for the aircraft
     } else {
+        // Allow I terms to accumulate in the PID sum
         pidSetItermReset(false);
+        // Let the PID controller stabilize the aircraft
         pidStabilisationState(PID_STABILISATION_ON);
     }
+    */
+    // HF3D TODO:  Think about the section above sometime.  We're not really using it now that we are decaying
+    //  any accumulated error while not spooledUp (or if error_decay_always is true)
+    pidSetItermReset(false);
+    pidStabilisationState(PID_STABILISATION_ON);
+    
 
 #ifdef USE_RUNAWAY_TAKEOFF
     // If runaway_takeoff_prevention is enabled, accumulate the amount of time that throttle
@@ -966,7 +979,7 @@ bool processRx(timeUs_t currentTimeUs)
     }
 #endif
 
-    pidSetAntiGravityState(IS_RC_MODE_ACTIVE(BOXANTIGRAVITY) || featureIsEnabled(FEATURE_ANTI_GRAVITY));
+    //pidSetAntiGravityState(IS_RC_MODE_ACTIVE(BOXANTIGRAVITY) || featureIsEnabled(FEATURE_ANTI_GRAVITY));
 
     return true;
 }

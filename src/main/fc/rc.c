@@ -80,6 +80,7 @@ enum {
     PITCH_FLAG = 1 << PITCH,
     YAW_FLAG = 1 << YAW,
     THROTTLE_FLAG = 1 << THROTTLE,
+    COLLECTIVE_FLAG = 1 << AUX1,      // HF3D:  Updated to allow AUX1 channel smoothing
 };
 
 #ifdef USE_RC_SMOOTHING_FILTER
@@ -232,7 +233,7 @@ static void calculateSetpointRate(int axis)
     DEBUG_SET(DEBUG_ANGLERATE, axis, angleRate);
 }
 
-static void scaleRcCommandToFpvCamAngle(void)
+/* static void scaleRcCommandToFpvCamAngle(void)
 {
     //recalculate sin/cos only when rxConfig()->fpvCamAngleDegrees changed
     static uint8_t lastFpvCamAngleDegrees = 0;
@@ -249,9 +250,9 @@ static void scaleRcCommandToFpvCamAngle(void)
     float yaw = setpointRate[YAW];
     setpointRate[ROLL] = constrainf(roll * cosFactor -  yaw * sinFactor, -SETPOINT_RATE_LIMIT * 1.0f, SETPOINT_RATE_LIMIT * 1.0f);
     setpointRate[YAW]  = constrainf(yaw  * cosFactor + roll * sinFactor, -SETPOINT_RATE_LIMIT * 1.0f, SETPOINT_RATE_LIMIT * 1.0f);
-}
+} */
 
-#define THROTTLE_BUFFER_MAX 20
+/* #define THROTTLE_BUFFER_MAX 20
 #define THROTTLE_DELTA_MS 100
 
 static void checkForThrottleErrorResetState(uint16_t rxRefreshRate)
@@ -277,12 +278,12 @@ static void checkForThrottleErrorResetState(uint16_t rxRefreshRate)
             pidSetItermAccelerator(1.0f);
         }
     }
-}
+} */
 
 static FAST_CODE uint8_t processRcInterpolation(void)
 {
-    static FAST_RAM_ZERO_INIT float rcCommandInterp[4];
-    static FAST_RAM_ZERO_INIT float rcStepSize[4];
+    static FAST_RAM_ZERO_INIT float rcCommandInterp[5];
+    static FAST_RAM_ZERO_INIT float rcStepSize[5];
     static FAST_RAM_ZERO_INIT int16_t rcInterpolationStepCount;
 
     uint16_t rxRefreshRate;
@@ -466,7 +467,7 @@ FAST_CODE_NOINLINE bool rcSmoothingAutoCalculate(void)
 static FAST_CODE uint8_t processRcSmoothingFilter(void)
 {
     uint8_t updatedChannel = 0;
-    static FAST_RAM_ZERO_INIT float lastRxData[4];
+    static FAST_RAM_ZERO_INIT float lastRxData[5];
     static FAST_RAM_ZERO_INIT bool initialized;
     static FAST_RAM_ZERO_INIT timeMs_t validRxFrameTimeMs;
     static FAST_RAM_ZERO_INIT bool calculateCutoffs;
@@ -632,9 +633,9 @@ FAST_CODE void processRcCommand(void)
         rcFrameNumber++;
     }
 
-    if (isRXDataNew && pidAntiGravityEnabled()) {
-        checkForThrottleErrorResetState(currentRxRefreshRate);
-    }
+    // if (isRXDataNew && pidAntiGravityEnabled()) {
+        // checkForThrottleErrorResetState(currentRxRefreshRate);
+    // }
 
 #ifdef USE_INTERPOLATED_SP
     if (isRXDataNew) {
@@ -675,10 +676,10 @@ FAST_CODE void processRcCommand(void)
 
         DEBUG_SET(DEBUG_RC_INTERPOLATION, 3, setpointRate[0]);
 
-        // Scaling of AngleRate to camera angle (Mixing Roll and Yaw)
+/*         // Scaling of AngleRate to camera angle (Mixing Roll and Yaw)
         if (rxConfig()->fpvCamAngleDegrees && IS_RC_MODE_ACTIVE(BOXFPVANGLEMIX) && !FLIGHT_MODE(HEADFREE_MODE)) {
             scaleRcCommandToFpvCamAngle();
-        }
+        } */
     }
 
     if (isRXDataNew) {
@@ -702,10 +703,11 @@ FAST_CODE_NOINLINE void updateRcCommands(void)
         throttlePIDAttenuation = prop / 100.0f;
     }
 
+    int32_t tmp;
     for (int axis = 0; axis < 3; axis++) {
         // non coupled PID reduction scaler used in PID controller 1 and PID controller 2.
 
-        int32_t tmp = MIN(ABS(rcData[axis] - rxConfig()->midrc), 500);
+        tmp = MIN(ABS(rcData[axis] - rxConfig()->midrc), 500);
         if (axis == ROLL || axis == PITCH) {
             if (tmp > rcControlsConfig()->deadband) {
                 tmp -= rcControlsConfig()->deadband;
@@ -726,7 +728,6 @@ FAST_CODE_NOINLINE void updateRcCommands(void)
         }
     }
 
-    int32_t tmp;
     if (featureIsEnabled(FEATURE_3D)) {
         tmp = constrain(rcData[THROTTLE], PWM_RANGE_MIN, PWM_RANGE_MAX);
         tmp = (uint32_t)(tmp - PWM_RANGE_MIN);
@@ -776,6 +777,50 @@ FAST_CODE_NOINLINE void updateRcCommands(void)
             rcCommand[YAW] = rcCommandBuff.Z;
         }
     }
+    
+    // HF3D:  Adding collective to rcCommands, constrain to -500/+500 range around midrc
+    tmp = constrain(rcData[COLLECTIVE] - rxConfig()->midrc, -500, 500);
+    rcCommand[COLLECTIVE] = tmp;
+    
+#if defined(USE_ACC)
+    // HF3D:  Rescue (angle) mode overrides user's collective pitch rcCommand
+    // Check if rescue (angle) mode is active
+    if (FLIGHT_MODE(ANGLE_MODE)) {    // || FLIGHT_MODE(GPS_RESCUE_MODE)
+        // attitude.values.roll/pitch = 0 when level, 1800 when fully inverted (decidegrees)
+        // Pitch is +90 / -90 at straight down and straight up.  Invert the absolute value of that so 0 = straight up/down
+        const float pitchCurrentInclination = 90.0f - (ABS(attitude.values.pitch) / 10.0f);
+        // Roll is +90/-90 when sideways, and +180/-180 when inverted
+        float rollCurrentInclination = 0.0f;
+        if (ABS(attitude.values.roll) > 900.0f) {
+            rollCurrentInclination = 90.0f - (180.0f - (ABS(attitude.values.roll) / 10.0f));
+        } else {
+            rollCurrentInclination = 90.0f - (ABS(attitude.values.roll) / 10.0f);
+        }
+        const float vertCurrentInclination = MIN(pitchCurrentInclination, rollCurrentInclination);
+
+        // adjust collective pitch so heli has no collective while past vertical, and pitch is added as it approaches level
+        // vertCurrentInclination between 0 (vertical) and 90 (level)  -- inverted from normal attitude values
+        // Hover pitch on my M2 test rig is around +100, full pitch pumps are around +240
+        // Desired collective at various rescue pitches:
+        //   90deg = 0 collective, 60deg=25col, 45deg=60col, 30deg=110col, 10deg=190col, 0deg=240col
+        //   ... output of this equation is 240, so normalize it and then multiply by rescue_collective setting.
+        // HF3D TODO:  Add rescue collective agression parameter to reduce tail blowout from large collective swings
+        //   Or just rate limit the collective change?  Basically it's the big load and governor change that can overwhelm
+        //   the tail authority of the heli.
+        // HF3D TODO:  acc angleTrim setting isn't taken into account here... but is in pidLevel.
+        //   Same issue up above.  It's minor as long as angleTrim is small, so maybe not worth the calculation overhead?
+        if ( ((attitude.values.roll / 10.0f) > 90.0f) || ((attitude.values.roll / 10.0f) < -90.0f) ) {
+            // We're closer to inverted and pidLevel will be rolling to inverted.
+            // Use negative collective pitch.
+            rcCommand[COLLECTIVE] = pidGetRescueCollectiveSetting() * (-0.02963f * vertCurrentInclination * vertCurrentInclination) / 240.0f;
+        } else {
+            // We're closer to upright and pidLevel will be rolling to upright.
+            // Use positive collective pitch.
+            rcCommand[COLLECTIVE] = pidGetRescueCollectiveSetting() * (0.02963f * vertCurrentInclination * vertCurrentInclination) / 240.0f;
+        }
+    }
+#endif
+    
 }
 
 void resetYawAxis(void)
@@ -822,6 +867,7 @@ void initRcProcessing(void)
     switch (rxConfig()->rcInterpolationChannels) {
     case INTERPOLATION_CHANNELS_RPYT:
         interpolationChannels |= THROTTLE_FLAG;
+        interpolationChannels |= COLLECTIVE_FLAG;          // HF3D:  Updated to allow AUX1 channel smoothing
 
         FALLTHROUGH;
     case INTERPOLATION_CHANNELS_RPY:
@@ -838,6 +884,7 @@ void initRcProcessing(void)
         FALLTHROUGH;
     case INTERPOLATION_CHANNELS_T:
         interpolationChannels |= THROTTLE_FLAG;
+        interpolationChannels |= COLLECTIVE_FLAG;         // HF3D:  Updated to allow AUX1 channel smoothing
 
         break;
     }

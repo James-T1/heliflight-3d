@@ -1080,7 +1080,12 @@ static bool mspProcessOutCommand(uint8_t cmdMSP, sbuf_t *dst)
 
 #ifdef USE_DSHOT_TELEMETRY
             if (motorConfig()->dev.useDshotTelemetry) {
-                rpm = (int)getDshotTelemetry(i) * 100 * 2 / motorConfig()->motorPoleCount;
+                // HF3D TODO:  Make motorPoleCount an array for differnet main/tail pole counts, update CLI/MSP telemetry/LUA/configurator to match
+                if (i == 1) {         // Tail motor RPM calculation for OMP M2
+                    rpm = (int)getDshotTelemetry(i) * 100 * 2 / 12;
+                } else {
+                    rpm = (int)getDshotTelemetry(i) * 100 * 2 / motorConfig()->motorPoleCount;
+                }
                 rpmDataAvailable = true;
                 invalidPct = 10000; // 100.00%
 #ifdef USE_DSHOT_TELEMETRY_STATS

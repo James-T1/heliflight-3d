@@ -4,6 +4,8 @@ Heliflight 3D is flight controller software (firmware) used to fly single-rotor 
 
 This fork differs from Baseflight, Cleanflight, and Betaflight in that it focuses on 3D flight performance for helicopters.  Heliflight 3D was forked from Betaflight 4.1.2.
 
+# Important Notice: During the initial development period, Heliflight 3D is *NOT* optimized for slower hardware.  It is highly suggested to use a STM32F7 based flight controller.
+
 
 ## News   (Legacy Betaflight updates)
 

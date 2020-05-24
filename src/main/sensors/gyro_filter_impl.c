@@ -40,6 +40,7 @@ static FAST_CODE void GYRO_FILTER_FUNCTION_NAME(void)
 #endif
 
 #ifdef USE_RPM_FILTER
+        // Replace the gyro value with the RPM filtered version
         gyroADCf = rpmFilterGyro(axis, gyroADCf);
 #endif
 

@@ -1673,8 +1673,9 @@ static void printMotorMix(dumpFlags_t dumpMask, const motorMixer_t *customMotorM
     char buf1[FTOA_BUFFER_LENGTH];
     char buf2[FTOA_BUFFER_LENGTH];
     char buf3[FTOA_BUFFER_LENGTH];
+    // HF3D:  Allow for tail motor control with throttle = 0.0f by checking Yaw channel mix as well as throttle
     for (uint32_t i = 0; i < MAX_SUPPORTED_MOTORS; i++) {
-        if (customMotorMixer[i].throttle == 0.0f)
+        if ((customMotorMixer[i].throttle == 0.0f) && (customMotorMixer[i].yaw == 0.0f))
             break;
         const float thr = customMotorMixer[i].throttle;
         const float roll = customMotorMixer[i].roll;
@@ -1721,6 +1722,7 @@ static void cliMotorMix(char *cmdline)
         // erase custom mixer
         for (uint32_t i = 0; i < MAX_SUPPORTED_MOTORS; i++) {
             customMotorMixerMutable(i)->throttle = 0.0f;
+            customMotorMixerMutable(i)->yaw = 0.0f;
         }
     } else if (strncasecmp(cmdline, "load", 4) == 0) {
         ptr = nextArg(cmdline);
@@ -1779,7 +1781,7 @@ static void printRxRange(dumpFlags_t dumpMask, const rxChannelRangeConfig_t *cha
 {
     const char *format = "rxrange %u %u %u";
     headingStr = cliPrintSectionHeading(dumpMask, false, headingStr);
-    for (uint32_t i = 0; i < NON_AUX_CHANNEL_COUNT; i++) {
+    for (uint32_t i = 0; i <= NON_AUX_CHANNEL_COUNT; i++) {             // HF3D:  Updated to allow setting RXRANGE for AUX1 (collective)
         bool equalsDefault = false;
         if (defaultChannelRangeConfigs) {
             equalsDefault = !memcmp(&channelRangeConfigs[i], &defaultChannelRangeConfigs[i], sizeof(channelRangeConfigs[i]));
@@ -1811,7 +1813,7 @@ static void cliRxRange(char *cmdline)
     } else {
         ptr = cmdline;
         i = atoi(ptr);
-        if (i >= 0 && i < NON_AUX_CHANNEL_COUNT) {
+        if (i >= 0 && i <= NON_AUX_CHANNEL_COUNT) {                     // HF3D:  Updated to allow setting RXRANGE for AUX1 (collective)
             int rangeMin = PWM_PULSE_MIN, rangeMax = PWM_PULSE_MAX;
 
             ptr = nextArg(ptr);
@@ -1842,7 +1844,7 @@ static void cliRxRange(char *cmdline)
 
             }
         } else {
-            cliShowArgumentRangeError("CHANNEL", 0, NON_AUX_CHANNEL_COUNT - 1);
+            cliShowArgumentRangeError("CHANNEL", 0, NON_AUX_CHANNEL_COUNT);    // HF3D:  Updated to allow setting RXRANGE for AUX1 (collective)
         }
     }
 }
@@ -2119,8 +2121,8 @@ static void cliServo(char *cmdline)
         servo = servoParamsMutable(i);
 
         if (
-            arguments[MIN] < PWM_PULSE_MIN || arguments[MIN] > PWM_PULSE_MAX ||
-            arguments[MAX] < PWM_PULSE_MIN || arguments[MAX] > PWM_PULSE_MAX ||
+            arguments[MIN] < PWM_SERVO_PULSE_MIN || arguments[MIN] > PWM_SERVO_PULSE_MAX ||
+            arguments[MAX] < PWM_SERVO_PULSE_MIN || arguments[MAX] > PWM_SERVO_PULSE_MAX ||
             arguments[MIDDLE] < arguments[MIN] || arguments[MIDDLE] > arguments[MAX] ||
             arguments[MIN] > arguments[MAX] || arguments[MAX] < arguments[MIN] ||
             arguments[RATE] < -100 || arguments[RATE] > 100 ||
@@ -3097,6 +3099,21 @@ static int parseOutputIndex(char *pch, bool allowAllEscs) {
     return outputIndex;
 }
 
+static int parseServoOverrideIndex(char *pch, bool allowAllServos) {
+    int outputIndex = atoi(pch);
+    if ((outputIndex >= 0) && (outputIndex < MAX_SUPPORTED_SERVOS)) {
+        cliPrintLinef("Using servo output %d.", outputIndex);
+    } else if (allowAllServos && outputIndex == ALL_MOTORS) {
+        cliPrintLinef("Using all servo outputs.");
+    } else {
+        cliPrintErrorLinef("INVALID SERVO NUMBER. RANGE: 0 - %d.", MAX_SUPPORTED_SERVOS - 1);
+
+        return -1;
+    }
+
+    return outputIndex;
+}
+
 #if defined(USE_DSHOT)
 #if defined(USE_ESC_SENSOR) && defined(USE_ESC_SENSOR_INFO)
 
@@ -3114,175 +3131,185 @@ enum {
 
 void printEscInfo(const uint8_t *escInfoBuffer, uint8_t bytesRead)
 {
-    bool escInfoReceived = false;
-    if (bytesRead > ESC_INFO_VERSION_POSITION) {
-        uint8_t escInfoVersion;
-        uint8_t frameLength;
-        if (escInfoBuffer[ESC_INFO_VERSION_POSITION] == 254) {
-            escInfoVersion = ESC_INFO_BLHELI32;
-            frameLength = ESC_INFO_BLHELI32_EXPECTED_FRAME_SIZE;
-        } else if (escInfoBuffer[ESC_INFO_VERSION_POSITION] == 255) {
-            escInfoVersion = ESC_INFO_KISS_V2;
-            frameLength = ESC_INFO_KISS_V2_EXPECTED_FRAME_SIZE;
-        } else {
-            escInfoVersion = ESC_INFO_KISS_V1;
-            frameLength = ESC_INFO_KISS_V1_EXPECTED_FRAME_SIZE;
-        }
-
-        if (bytesRead == frameLength) {
-            escInfoReceived = true;
-
-            if (calculateCrc8(escInfoBuffer, frameLength - 1) == escInfoBuffer[frameLength - 1]) {
-                uint8_t firmwareVersion = 0;
-                uint8_t firmwareSubVersion = 0;
-                uint8_t escType = 0;
-                switch (escInfoVersion) {
-                case ESC_INFO_KISS_V1:
-                    firmwareVersion = escInfoBuffer[12];
-                    firmwareSubVersion = (escInfoBuffer[13] & 0x1f) + 97;
-                    escType = (escInfoBuffer[13] & 0xe0) >> 5;
-
-                    break;
-                case ESC_INFO_KISS_V2:
-                    firmwareVersion = escInfoBuffer[13];
-                    firmwareSubVersion = escInfoBuffer[14];
-                    escType = escInfoBuffer[15];
-
-                    break;
-                case ESC_INFO_BLHELI32:
-                    firmwareVersion = escInfoBuffer[13];
-                    firmwareSubVersion = escInfoBuffer[14];
-                    escType = escInfoBuffer[15];
-
-                    break;
-                }
-
-                cliPrint("ESC Type: ");
-                switch (escInfoVersion) {
-                case ESC_INFO_KISS_V1:
-                case ESC_INFO_KISS_V2:
-                    switch (escType) {
-                    case 1:
-                        cliPrintLine("KISS8A");
-
-                        break;
-                    case 2:
-                        cliPrintLine("KISS16A");
-
-                        break;
-                    case 3:
-                        cliPrintLine("KISS24A");
-
-                        break;
-                    case 5:
-                        cliPrintLine("KISS Ultralite");
-
-                        break;
-                    default:
-                        cliPrintLine("unknown");
-
-                        break;
-                    }
-
-                    break;
-                case ESC_INFO_BLHELI32:
-                    {
-                        char *escType = (char *)(escInfoBuffer + 31);
-                        escType[32] = 0;
-                        cliPrintLine(escType);
-                    }
-
-                    break;
-                }
-
-                cliPrint("MCU Serial No: 0x");
-                for (int i = 0; i < 12; i++) {
-                    if (i && (i % 3 == 0)) {
-                        cliPrint("-");
-                    }
-                    cliPrintf("%02x", escInfoBuffer[i]);
-                }
-                cliPrintLinefeed();
-
-                switch (escInfoVersion) {
-                case ESC_INFO_KISS_V1:
-                case ESC_INFO_KISS_V2:
-                    cliPrintLinef("Firmware Version: %d.%02d%c", firmwareVersion / 100, firmwareVersion % 100, (char)firmwareSubVersion);
-
-                    break;
-                case ESC_INFO_BLHELI32:
-                    cliPrintLinef("Firmware Version: %d.%02d%", firmwareVersion, firmwareSubVersion);
-
-                    break;
-                }
-                if (escInfoVersion == ESC_INFO_KISS_V2 || escInfoVersion == ESC_INFO_BLHELI32) {
-                    cliPrintLinef("Rotation Direction: %s", escInfoBuffer[16] ? "reversed" : "normal");
-                    cliPrintLinef("3D: %s", escInfoBuffer[17] ? "on" : "off");
-                    if (escInfoVersion == ESC_INFO_BLHELI32) {
-                        uint8_t setting = escInfoBuffer[18];
-                        cliPrint("Low voltage Limit: ");
-                        switch (setting) {
-                        case 0:
-                            cliPrintLine("off");
-
-                            break;
-                        case 255:
-                            cliPrintLine("unsupported");
-
-                            break;
-                        default:
-                            cliPrintLinef("%d.%01d", setting / 10, setting % 10);
-
-                            break;
-                        }
-
-                        setting = escInfoBuffer[19];
-                        cliPrint("Current Limit: ");
-                        switch (setting) {
-                        case 0:
-                            cliPrintLine("off");
-
-                            break;
-                        case 255:
-                            cliPrintLine("unsupported");
-
-                            break;
-                        default:
-                            cliPrintLinef("%d", setting);
-
-                            break;
-                        }
-
-                        for (int i = 0; i < 4; i++) {
-                            setting = escInfoBuffer[i + 20];
-                            cliPrintLinef("LED %d: %s", i, setting ? (setting == 255) ? "unsupported" : "on" : "off");
-                        }
-                    }
-                }
+    if ( escSensorConfig()->escSensorProtocol == ESC_SENSOR_PROTOCOL_HOBBYWINGV4 ) {
+        cliPrintLine("HobbyWing V4 ESC Protocol -- ESC info not supported.");
+    } else {
+        // KISS ESC PROTOCOL
+        bool escInfoReceived = false;
+        if (bytesRead > ESC_INFO_VERSION_POSITION) {
+            uint8_t escInfoVersion;
+            uint8_t frameLength;
+            if (escInfoBuffer[ESC_INFO_VERSION_POSITION] == 254) {
+                escInfoVersion = ESC_INFO_BLHELI32;
+                frameLength = ESC_INFO_BLHELI32_EXPECTED_FRAME_SIZE;
+            } else if (escInfoBuffer[ESC_INFO_VERSION_POSITION] == 255) {
+                escInfoVersion = ESC_INFO_KISS_V2;
+                frameLength = ESC_INFO_KISS_V2_EXPECTED_FRAME_SIZE;
             } else {
-                cliPrintErrorLinef("CHECKSUM ERROR.");
+                escInfoVersion = ESC_INFO_KISS_V1;
+                frameLength = ESC_INFO_KISS_V1_EXPECTED_FRAME_SIZE;
+            }
+
+            if (bytesRead == frameLength) {
+                escInfoReceived = true;
+
+                if (calculateCrc8(escInfoBuffer, frameLength - 1) == escInfoBuffer[frameLength - 1]) {
+                    uint8_t firmwareVersion = 0;
+                    uint8_t firmwareSubVersion = 0;
+                    uint8_t escType = 0;
+                    switch (escInfoVersion) {
+                    case ESC_INFO_KISS_V1:
+                        firmwareVersion = escInfoBuffer[12];
+                        firmwareSubVersion = (escInfoBuffer[13] & 0x1f) + 97;
+                        escType = (escInfoBuffer[13] & 0xe0) >> 5;
+
+                        break;
+                    case ESC_INFO_KISS_V2:
+                        firmwareVersion = escInfoBuffer[13];
+                        firmwareSubVersion = escInfoBuffer[14];
+                        escType = escInfoBuffer[15];
+
+                        break;
+                    case ESC_INFO_BLHELI32:
+                        firmwareVersion = escInfoBuffer[13];
+                        firmwareSubVersion = escInfoBuffer[14];
+                        escType = escInfoBuffer[15];
+
+                        break;
+                    }
+
+                    cliPrint("ESC Type: ");
+                    switch (escInfoVersion) {
+                    case ESC_INFO_KISS_V1:
+                    case ESC_INFO_KISS_V2:
+                        switch (escType) {
+                        case 1:
+                            cliPrintLine("KISS8A");
+
+                            break;
+                        case 2:
+                            cliPrintLine("KISS16A");
+
+                            break;
+                        case 3:
+                            cliPrintLine("KISS24A");
+
+                            break;
+                        case 5:
+                            cliPrintLine("KISS Ultralite");
+
+                            break;
+                        default:
+                            cliPrintLine("unknown");
+
+                            break;
+                        }
+
+                        break;
+                    case ESC_INFO_BLHELI32:
+                        {
+                            char *escType = (char *)(escInfoBuffer + 31);
+                            escType[32] = 0;
+                            cliPrintLine(escType);
+                        }
+
+                        break;
+                    }
+
+                    cliPrint("MCU Serial No: 0x");
+                    for (int i = 0; i < 12; i++) {
+                        if (i && (i % 3 == 0)) {
+                            cliPrint("-");
+                        }
+                        cliPrintf("%02x", escInfoBuffer[i]);
+                    }
+                    cliPrintLinefeed();
+
+                    switch (escInfoVersion) {
+                    case ESC_INFO_KISS_V1:
+                    case ESC_INFO_KISS_V2:
+                        cliPrintLinef("Firmware Version: %d.%02d%c", firmwareVersion / 100, firmwareVersion % 100, (char)firmwareSubVersion);
+
+                        break;
+                    case ESC_INFO_BLHELI32:
+                        cliPrintLinef("Firmware Version: %d.%02d%", firmwareVersion, firmwareSubVersion);
+
+                        break;
+                    }
+                    if (escInfoVersion == ESC_INFO_KISS_V2 || escInfoVersion == ESC_INFO_BLHELI32) {
+                        cliPrintLinef("Rotation Direction: %s", escInfoBuffer[16] ? "reversed" : "normal");
+                        cliPrintLinef("3D: %s", escInfoBuffer[17] ? "on" : "off");
+                        if (escInfoVersion == ESC_INFO_BLHELI32) {
+                            uint8_t setting = escInfoBuffer[18];
+                            cliPrint("Low voltage Limit: ");
+                            switch (setting) {
+                            case 0:
+                                cliPrintLine("off");
+
+                                break;
+                            case 255:
+                                cliPrintLine("unsupported");
+
+                                break;
+                            default:
+                                cliPrintLinef("%d.%01d", setting / 10, setting % 10);
+
+                                break;
+                            }
+
+                            setting = escInfoBuffer[19];
+                            cliPrint("Current Limit: ");
+                            switch (setting) {
+                            case 0:
+                                cliPrintLine("off");
+
+                                break;
+                            case 255:
+                                cliPrintLine("unsupported");
+
+                                break;
+                            default:
+                                cliPrintLinef("%d", setting);
+
+                                break;
+                            }
+
+                            for (int i = 0; i < 4; i++) {
+                                setting = escInfoBuffer[i + 20];
+                                cliPrintLinef("LED %d: %s", i, setting ? (setting == 255) ? "unsupported" : "on" : "off");
+                            }
+                        }
+                    }
+                } else {
+                    cliPrintErrorLinef("CHECKSUM ERROR.");
+                }
             }
         }
-    }
 
-    if (!escInfoReceived) {
-        cliPrintLine("No Info.");
+        if (!escInfoReceived) {
+            cliPrintLine("No Info.");
+        }
     }
 }
 
 static void executeEscInfoCommand(uint8_t escIndex)
 {
-    cliPrintLinef("Info for ESC %d:", escIndex);
+    if ( escSensorConfig()->escSensorProtocol == ESC_SENSOR_PROTOCOL_HOBBYWINGV4 ) {
+        cliPrintLine("HobbyWing V4 ESC Protocol -- ESC info not supported.");
+    } else {
+        // KISS ESC PROTOCOL
+        cliPrintLinef("Info for ESC %d:", escIndex);
 
-    uint8_t escInfoBuffer[ESC_INFO_BLHELI32_EXPECTED_FRAME_SIZE];
+        uint8_t escInfoBuffer[ESC_INFO_BLHELI32_EXPECTED_FRAME_SIZE];
 
-    startEscDataRead(escInfoBuffer, ESC_INFO_BLHELI32_EXPECTED_FRAME_SIZE);
+        startEscDataRead(escInfoBuffer, ESC_INFO_BLHELI32_EXPECTED_FRAME_SIZE);
 
-    dshotCommandWrite(escIndex, getMotorCount(), DSHOT_CMD_ESC_INFO, true);
+        dshotCommandWrite(escIndex, getMotorCount(), DSHOT_CMD_ESC_INFO, true);
 
-    delay(10);
+        delay(10);
 
-    printEscInfo(escInfoBuffer, getNumberEscBytesRead());
+        printEscInfo(escInfoBuffer, getNumberEscBytesRead());
+    }
 }
 #endif // USE_ESC_SENSOR && USE_ESC_SENSOR_INFO
 
@@ -3511,6 +3538,138 @@ static void cliMotor(char *cmdline)
         cliShowParseError();
     }
 }
+
+static void cliServoPosition(char *cmdline)
+{
+    if (isEmpty(cmdline)) {
+        // Print out the current servo position outputs if no parameters given
+        cliPrintLinef("Status of all servo positions:");
+        for (int i = 0; i < MAX_SUPPORTED_SERVOS; i++) {
+            cliPrintLinef("  Current output for Servo %d: %d", i, servo[i]);
+        }
+        //cliShowParseError();
+
+        return;
+    }
+
+    int servoIndex = 0;
+    int servoValue = -2000;
+
+    char *saveptr;
+    char *pch = strtok_r(cmdline, " ", &saveptr);
+    int index = 0;
+    while (pch != NULL) {
+        switch (index) {
+        case 0:
+            servoIndex = parseServoOverrideIndex(pch, true);
+            if (servoIndex == -1) {
+                return;
+            }
+
+            break;
+        case 1:
+            servoValue = atoi(pch);
+
+            break;
+        }
+        index++;
+        pch = strtok_r(NULL, " ", &saveptr);
+    }
+
+    if (index == 2) {
+        if (servoValue < -1000 || servoValue > 2001) {
+            cliShowArgumentRangeError("VALUE", -1000, 2001);
+        } else {
+            int servoOutputValue = servoValue;
+
+            if (servoIndex != ALL_MOTORS) {
+                servo_override[servoIndex] = servoOutputValue;
+
+                cliPrintLinef("servo %d override set to: %d", servoIndex, servoOutputValue);
+            } else  {
+                for (int i = 0; i < MAX_SUPPORTED_SERVOS; i++) {
+                    servo_override[i] = servoOutputValue;
+                }
+
+                cliPrintLinef("all servos override set to: %d", servoOutputValue);
+            }
+        }
+    } else {
+        // Print out the current servo override setting if no position given (255 = all servos print)
+        if (servoIndex != ALL_MOTORS) {
+            cliPrintLinef("Servo override setting for servo %d: %d", servoIndex, servo_override[servoIndex]);
+        } else  {
+            for (int i = 0; i < MAX_SUPPORTED_SERVOS; i++) {
+                cliPrintLinef("Servo override setting for servo %d: %d", i, servo_override[i]);
+            }
+        }
+        //cliShowParseError();
+    }
+}
+
+static void cliServoInputOverride(char *cmdline)
+{
+    if (isEmpty(cmdline)) {
+        if (servo_input_override[4]) {
+            cliPrintLinef("Servo input override is on.");
+            cliPrintLinef(" Collective input (0) override value: %d", servo_input_override[0]);
+            cliPrintLinef(" Roll input (1) override value: %d", servo_input_override[1]);
+            cliPrintLinef(" Pitch input (2) override value: %d", servo_input_override[2]);
+            cliPrintLinef(" Yaw input (3) override value: %d", servo_input_override[3]);
+        } else {
+            cliPrintLinef("Servo input override is off.");
+        }
+        return;
+    }
+
+    int inputIndex = 0;
+    int overrideValue = 0;
+
+    char *saveptr;
+    char *pch = strtok_r(cmdline, " ", &saveptr);
+    int index = 0;
+    while (pch != NULL) {
+        switch (index) {
+        case 0:
+            if (strcasestr(pch, "on")) {
+                servo_input_override[4] = 1;
+                return;
+            } else if (strcasestr(pch, "off")) {
+                servo_input_override[4] = 0;
+                return;
+            }
+
+            inputIndex = atoi(pch);
+            if ((inputIndex >= 0) && (inputIndex <= 3)) {
+                cliPrintLinef("Setting servo input override for %d.", inputIndex);
+            } else {
+                cliPrintErrorLinef("INVALID SERVO INPUT CHANNEL. RANGE: 0 - 3.");
+                return;
+            }
+            break;
+
+        case 1:
+            overrideValue = atoi(pch);
+            break;
+        }
+        index++;
+        pch = strtok_r(NULL, " ", &saveptr);
+    }
+
+    if (index == 2) {
+        if (overrideValue < -1000 || overrideValue > 1000) {
+            cliShowArgumentRangeError("VALUE", -1000, 1000);
+        } else {
+            servo_input_override[inputIndex] = overrideValue;
+            cliPrintLinef("input override value for input %d set to: %d", inputIndex, overrideValue);
+        }
+    } else {
+        // Print out the current input override setting if no position given (255 = all servos print)
+        cliPrintLinef("input override value for input %d: %d", inputIndex, servo_input_override[inputIndex]);
+        //cliShowParseError();
+    }
+}
+
 
 #ifndef MINIMAL_CLI
 static void cliPlaySound(char *cmdline)
@@ -5421,10 +5580,18 @@ static void cliDshotTelemetryInfo(char *cmdline)
         cliPrintLine("=====   =======   ======   =====");
 #endif
         for (uint8_t i = 0; i < getMotorCount(); i++) {
-            cliPrintf("%5d   %7d   %6d   %5d   ", i,
+            // HF3D TODO:  Make motorPoleCount an array for differnet main/tail pole counts, update CLI/MSP telemetry/LUA/configurator to match
+            if (i == 1) {         // Tail motor
+                cliPrintf("%5d   %7d   %6d   %5d   ", i,
                       (int)getDshotTelemetry(i) * 100,
-                      (int)getDshotTelemetry(i) * 100 * 2 / motorConfig()->motorPoleCount,
-                      (int)getDshotTelemetry(i) * 100 * 2 / motorConfig()->motorPoleCount / 60);
+                      (int)getDshotTelemetry(i) * 100 * 2 / 12,
+                      (int)getDshotTelemetry(i) * 100 * 2 / 12 / 60);
+            } else {            // Main/other motor
+                cliPrintf("%5d   %7d   %6d   %5d   ", i,
+                          (int)getDshotTelemetry(i) * 100,
+                          (int)getDshotTelemetry(i) * 100 * 2 / motorConfig()->motorPoleCount,
+                          (int)getDshotTelemetry(i) * 100 * 2 / motorConfig()->motorPoleCount / 60);
+            }
 #ifdef USE_DSHOT_TELEMETRY_STATS
             if (isDshotMotorTelemetryActive(i)) {
                 const int calcPercent = getDshotTelemetryMotorInvalidPercent(i);
@@ -5546,7 +5713,8 @@ static void printConfig(char *cmdline, bool doDiff)
             cliDefaultPrintLinef(dumpMask, equalsDefault, formatMixer, mixerNames[mixerConfig()->mixerMode - 1]);
             cliDumpPrintLinef(dumpMask, equalsDefault, formatMixer, mixerNames[mixerConfig_Copy.mixerMode - 1]);
 
-            cliDumpPrintLinef(dumpMask, customMotorMixer(0)->throttle == 0.0f, "\r\nmmix reset\r\n");
+            // HF3D:  Changed to allow for yaw term only on tail motor mix, although main motor should probably always be the first motor?
+            cliDumpPrintLinef(dumpMask, ((customMotorMixer(0)->throttle == 0.0f) && (customMotorMixer(0)->yaw == 0.0f)), "\r\nmmix reset\r\n");
 
             printMotorMix(dumpMask, customMotorMixer_CopyArray, customMotorMixer(0), mixerHeadingStr);
 
@@ -5852,6 +6020,8 @@ const clicmd_t cmdTable[] = {
 #endif
 #ifdef USE_SERVOS
     CLI_COMMAND_DEF("servo", "configure servos", NULL, cliServo),
+    CLI_COMMAND_DEF("servo_position",  "get servo positions/set servo position offsets", "<index> [<value>]", cliServoPosition),
+    CLI_COMMAND_DEF("servo_input_override",  "get/set servo input overrides (collective/roll/pitch/yaw)", "<index> [<value>]", cliServoInputOverride),
 #endif
     CLI_COMMAND_DEF("set", "change setting", "[<name>=<value>]", cliSet),
 #if defined(USE_SIGNATURE)
