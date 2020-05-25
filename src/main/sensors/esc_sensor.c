@@ -148,10 +148,10 @@ static bool isFrameComplete(void)
     return bufferPosition == bufferSize;
 }
 
-bool isEscSensorActive(void)
-{
-    return escSensorPort != NULL;
-}
+// bool isEscSensorActive(void)
+// {
+    // return escSensorPort != NULL;
+// }
 
 // HF3D:  Added to provide RPM data to rpm filter and spoolup/governor logic when DSHOT RPM or RPM Sensor isn't available.
 bool isEscSensorValid(uint8_t motorNumber)

@@ -88,7 +88,6 @@ typedef struct mixerConfig_s {
     uint16_t gov_cyclic_ff_gain;
     uint16_t gov_collective_ff_gain;
     uint16_t gov_collective_ff_impulse_gain;
-    uint16_t gov_collective_ff_impulse_freq;
     uint16_t spoolup_time;
 } mixerConfig_t;
 

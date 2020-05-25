@@ -82,8 +82,7 @@ PG_RESET_TEMPLATE(mixerConfig_t, mixerConfig,
     .gov_cyclic_ff_gain = 0,
     .gov_collective_ff_gain = 0,
     .gov_collective_ff_impulse_gain = 0,
-    .gov_collective_ff_impulse_freq = 100,
-    .spoolup_time = 5
+    .spoolup_time = 10
 );
 
 PG_REGISTER_ARRAY(motorMixer_t, MAX_SUPPORTED_MOTORS, customMotorMixer, PG_MOTOR_MIXER, 0);
@@ -300,7 +299,7 @@ static FAST_RAM_ZERO_INIT float idleMinMotorRps;
 static FAST_RAM_ZERO_INIT float idleP;
 #endif
 // Governor & Spool-up
-static FAST_RAM_ZERO_INIT float rampRate;  // = 0.0002f     // Used for spool-up logic.  Default is 5 seconds at 1kHz.
+static FAST_RAM_ZERO_INIT float rampRate;                   // Used for spool-up logic.
 static FAST_RAM_ZERO_INIT uint16_t govMaxHeadspeed;
 static FAST_RAM_ZERO_INIT float govGearRatio;
 static FAST_RAM_ZERO_INIT float govKp;
@@ -308,9 +307,6 @@ static FAST_RAM_ZERO_INIT float govKi;
 static FAST_RAM_ZERO_INIT float govCycKf;
 static FAST_RAM_ZERO_INIT float govColKf;
 static FAST_RAM_ZERO_INIT float govColPulseKf;
-static FAST_RAM_ZERO_INIT float govColPulseFc;
-static FAST_RAM_ZERO_INIT float govColPulseFilterGain;   
-static FAST_RAM_ZERO_INIT float govBaseThrottleFilterGain;   // Used for governor failure
 
 uint8_t getMotorCount(void)
 {
@@ -381,6 +377,7 @@ void mixerInit(mixerMode_e mixerMode)
 #endif
     
     // Initialize governor settings
+    //  NOTE:  MixerInit is called from init.c well before pidInit, so don't depend on anything from there (like pidGetDT())
     // Determine rampRate that will increase throttle on each loop to go from 0% throttle to 100% throttle in rampTime seconds
     // We're stealing the mmix throttle% section on motor 0 to be our ramp-up time instead. 
     // rampTime is how many seconds to go from 0rpm to 100% pwm output
@@ -395,7 +392,7 @@ void mixerInit(mixerMode_e mixerMode)
         // 1e6f should be 1000000
         // SO WHY DOESN'T IT WORK?????  Result should be 0.000025f, but instead the stupid heli just won't spool up.
     
-    rampRate = 0.000025f;
+    //rampRate = 0.000025f;
     //rampRate = pidGetDT() / (float)mixerConfig()->spoolup_time;
     // HF3D TODO:  lol... rampRate STILL not working.  Wtf.
     govMaxHeadspeed = mixerConfig()->gov_max_headspeed;     // stays uint16_t
@@ -405,14 +402,12 @@ void mixerInit(mixerMode_e mixerMode)
     govCycKf = (float)mixerConfig()->gov_cyclic_ff_gain / 100.0f;
     govColKf = (float)mixerConfig()->gov_collective_ff_gain / 10000.0f;
     govColPulseKf = (float)mixerConfig()->gov_collective_ff_impulse_gain / 10000.0f;
-    govColPulseFc = (float)mixerConfig()->gov_collective_ff_impulse_freq / 100.0f;     // Setting is frequency in Hz / 100
     
-    // Setup filter for governor base throttle & Collective Impulse Feedforward
+    // Setup filter for governor base throttle
     // Calculate similar to pt1FilterGain with cutoff frequency of 0.05Hz (20s)
     //   RC = 1 / ( 2 * M_PI_FLOAT * f_cut);  ==> RC = 3.183
     //   k = dT / (RC + dT);                  ==>  k = 0.0000393 for 8kHz
-    govBaseThrottleFilterGain = pidGetDT() / (pidGetDT() + (1 / ( 2 * 3.14159f * 0.05f)));
-    govColPulseFilterGain = pidGetDT() / (pidGetDT() + (1 / ( 2 * 3.14159f * govColPulseFc)));
+    //govBaseThrottleFilterGain = pidGetDT() / (pidGetDT() + (1 / ( 2 * 3.14159f * 0.05f)));
 }
 
 
@@ -686,7 +681,20 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
     //     * If used, tail motor should have 100% yaw mixing
     //     * mmix 1 (tail motor) uses the Throttle% to determine tailMotorBaseThrustGain
     //     *    1.0 would be way too high.  Full tail thrust when head is at 100% rpm.
-    float mainMotorThrottle = 0.0f;         // Used by the tail code to set the base tail motor output as a fraction of main motor output
+    
+    // Store mainMotorThrottle so we can override setting later if we're in pass-through mode
+    float mainMotorThrottle = throttle;         // Used later by the tail code to set the base tail motor output as a fraction of main motor output
+
+    // Calculate rampRate.  Must do it here vs. in init because when mixer is initialized we don't know dT yet.
+    //  HF3D TODO:  This could be moved to a separate "init" function that's called from pid.c's function that sets the dT variable.
+    //     Not sure that complication would really help reduce CPU load much.
+    if (mixerConfig()->spoolup_time > 0) {
+        rampRate = pidGetDT() / (float)mixerConfig()->spoolup_time;
+    } else {
+        // Assume a ramprate of 8 seconds for external governor / ESC when in pass-through mode.
+        // Will allow us to set spooled-up flag if we see headspeed > 1000rpm on a RPM sensor or telemetry.
+        rampRate = pidGetDT() / 8.0f;
+    }
 
     // Handle MAIN motor (motor[0]) throttle output & spool-up
     if (motorCount > 0) {
@@ -773,7 +781,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
             spooledUp = 1;
             lastSpoolThrottle = throttle;        // Allow spool target to reduce with throttle freely even if already spooledUp.
             // HF3D TODO:  There's a bug with this block....
-            //   If you spool up above 1000 and then come back below that throttle setting (normal mode)
+            //   If you spool up above 1000rpm and then come back below that throttle setting (normal mode)
             //   lastSpoolThrottle will ONLY go down since that's all it's allowed to do here.
             //   Then when the governor turns on it gets this really low lastSpoolThrottle value (maybe even zero)
             //      and then throttle drops to zero and the i-term has to wind up the entire amount.
@@ -890,16 +898,23 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
             // Slowly adapt our govBaseThrottle over time (LPF) as a fallback in case we lose RPM data.
             // HF3D TODO:  If always flying at high collective pitch, that govCollectiveFF will end up adding into the govBaseThrottle
             //    This means the base throttle will be ramped way up if then go back towards a lower average pitch... is that a problem?
-            float govBaseThrottleChange = (throttle - govBaseThrottle) * govBaseThrottleFilterGain;
-            govBaseThrottle += govBaseThrottleChange;
+            //float govBaseThrottleChange = (throttle - govBaseThrottle) * govBaseThrottleFilterGain;
+            //govBaseThrottle += govBaseThrottleChange;
             // Adjust the I-term to account for the base throttle adjustment we just made
             // HF3D TODO:  What if I-term was at contraints before we did this?
-            govI -= govBaseThrottleChange;
+            //govI -= govBaseThrottleChange;
         
             // Set lastSpoolThrottle to track the governor throttle signal when the governor is active
             lastSpoolThrottle = throttle;
 
             DEBUG_SET(DEBUG_SMARTAUDIO, 2, govPidSum*1000.0f);             // Max pidsum will be around 1, so increase by 1000x
+        }
+        
+        // Enable pass-through of throttle signal if spoolup_time setting = 0 and we are armed.
+        //   Must be used in conjunction with setting   gov_max_headspeed = 0 to have the spoolUp flag be set if an RPM sensor/telemetry is working.
+        //   spooledUp flag will be set 8 seconds after throttle hold is released if headspeed > 1000 rpm.
+        if ((mixerConfig()->spoolup_time == 0) && (ARMING_FLAG(ARMED))) {
+            throttle = mainMotorThrottle;    // We stored the original value of the throttle signal into mainMotorThrottle variable at the beginning of the governor/spoolup code
         }
         
         mainMotorThrottle = throttle;        // Used by the tail motor code to set the base tail motor output as a fraction of main motor output
@@ -1238,9 +1253,4 @@ uint8_t isHeliSpooledUp(void)
 float mixerGetGovGearRatio(void)
 {
     return govGearRatio;
-}
-
-float mixerGetGovCollectivePulseFilterGain(void)
-{
-    return govColPulseFilterGain;
 }

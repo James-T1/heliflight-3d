@@ -232,6 +232,7 @@ void resetPidProfile(pidProfile_t *pidProfile)
         .rescue_collective = 200,
         .error_decay_always = 0,
         .error_decay_rate = 7,
+        .collective_ff_impulse_freq = 100,
     );
 #ifndef USE_D_MIN
     pidProfile->pid[PID_ROLL].D = 30;
@@ -333,6 +334,8 @@ static FAST_RAM_ZERO_INIT pt1Filter_t airmodeThrottleLpf2;
 static FAST_RAM_ZERO_INIT float ffBoostFactor;
 static FAST_RAM_ZERO_INIT float ffSmoothFactor;
 static FAST_RAM_ZERO_INIT float ffSpikeLimitInverse;
+
+static FAST_RAM_ZERO_INIT float collectivePulseFilterGain;
 
 float pidGetSpikeLimitInverse()
 {
@@ -490,6 +493,13 @@ void pidInitFilters(const pidProfile_t *pidProfile)
 
     ffBoostFactor = (float)pidProfile->ff_boost / 10.0f;
     ffSpikeLimitInverse = pidProfile->ff_spike_limit ? 1.0f / ((float)pidProfile->ff_spike_limit / 10.0f) : 0.0f;
+    
+    // HF3D
+    // Collective input impulse high-pass filter.  Setting is for cutoff frequency in Hz * 100.
+    // Calculate similar to pt1FilterGain with cutoff frequency of 0.05Hz (20s)
+    //   RC = 1 / ( 2 * M_PI_FLOAT * f_cut);  ==> RC = 3.183
+    //   k = dT / (RC + dT);                  ==>  k = 0.0000393 for 8kHz
+    collectivePulseFilterGain = dT / (dT + (1 / ( 2 * 3.14159f * (float)pidProfile->collective_ff_impulse_freq / 100.0f)));
 }
 
 #ifdef USE_RC_SMOOTHING_FILTER
@@ -1383,6 +1393,7 @@ static FAST_RAM_ZERO_INIT float yawPidSetpoint;         // HF3D:  Hold the previ
 static FAST_RAM_ZERO_INIT float collectiveStickPercent;        // HF3D
 static FAST_RAM_ZERO_INIT float collectiveStickLPF;            // HF3D:  Collective stick values
 static FAST_RAM_ZERO_INIT float collectiveStickHPF;
+
 void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTimeUs)
 {
     static float previousGyroRateDterm[XYZ_AXIS_COUNT];
@@ -1695,7 +1706,7 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
             // Collective pitch impulse feed-forward for the main motor
             // Run our collectiveStickPercent through a low pass filter
             // HF3D TODO:  Pulse filter calc should probably be moved to PID?  But it probably shouldn't be a profile setting?
-            collectiveStickLPF = collectiveStickLPF + mixerGetGovCollectivePulseFilterGain() * (collectiveStickPercent - collectiveStickLPF);
+            collectiveStickLPF = collectiveStickLPF + collectivePulseFilterGain * (collectiveStickPercent - collectiveStickLPF);
             // Subtract LPF from the original value to get a high pass filter
             // HPF value will be <60% or so of the collectiveStickPercent, and will be smaller the slower the stick movement is.
             //  Cutoff frequency determines this action.
@@ -1738,7 +1749,12 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
             
             // Add our collective feedforward terms into the yaw axis pidSum as long as we don't have a motor driven tail
             if (getMotorCount() == 1) {
-                pidData[FD_YAW].F += tailCollectiveFF + tailCollectivePulseFF + tailBaseThrust + tailCyclicFF;
+                // Only if we're armed and throttle > 15 use the tail feedforwards.  If we're auto-rotating then there's no use for all this stuff.  It will just screw up our tail position since there's no main motor torque!!
+                // HF3D TODO:  Add a configurable override for this check in case someone wants to run an external governor without passing the throttle signal through the flight controller?
+                if ((calculateThrottlePercentAbs() > 15) || (!ARMING_FLAG(ARMED))) {
+                    // if disarmed, show the user what they will get regardless of throttle value
+                    pidData[FD_YAW].F += tailCollectiveFF + tailCollectivePulseFF + tailBaseThrust + tailCyclicFF;
+                } 
             }
             // HF3D TODO:  Do some integration of the motor driven tail code here for motorCount == 2...
             //   But have to be careful, because if main motor throttle goes near zero then we'll never get the tail back if we're
@@ -1897,4 +1913,9 @@ float pidGetCollectiveStickHPF()
 uint16_t pidGetRescueCollectiveSetting()
 {
     return rescueCollective;
+}
+
+float pidGetCollectivePulseFilterGain(void)
+{
+    return collectivePulseFilterGain;
 }

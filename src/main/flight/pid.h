@@ -189,6 +189,7 @@ typedef struct pidProfile_s {
     uint16_t rescue_collective;             // Collective pitch command when rescue is fully upright
     uint8_t error_decay_always;             // Always decay accumulated I term and Abs Control error?
     uint8_t error_decay_rate;               // Rate to decay accumulated error in deg/s
+    uint16_t collective_ff_impulse_freq;    // Collective input impulse high-pass filter cutoff frequency
     
 } pidProfile_t;
 
@@ -272,3 +273,4 @@ float pidGetSpikeLimitInverse();
 float pidGetCollectiveStickPercent();
 float pidGetCollectiveStickHPF();
 uint16_t pidGetRescueCollectiveSetting();
+float pidGetCollectivePulseFilterGain();
