@@ -428,6 +428,7 @@ void servoMixer(void)
         //    Default pidSumLimit is 500 on roll/pitch and 400 on yaw, with min/max settable range of 100-1000
         input[INPUT_STABILIZED_ROLL] = constrainf(pidData[FD_ROLL].Sum, -currentPidProfile->pidSumLimit, currentPidProfile->pidSumLimit) * PID_SERVO_MIXER_SCALING;
         input[INPUT_STABILIZED_PITCH] = constrainf(pidData[FD_PITCH].Sum, -currentPidProfile->pidSumLimit, currentPidProfile->pidSumLimit) * PID_SERVO_MIXER_SCALING;
+		// NOTE:  WIth servo mixer scaling applied to yaw, it means that a pidSum of 1428 (143% in BB Explorer) is needed to max out the yaw channel.
         input[INPUT_STABILIZED_YAW] = pidData[FD_YAW].Sum * PID_SERVO_MIXER_SCALING;
 
         // Reverse yaw servo when inverted in 3D mode (Betaflight code meant for FPV)
