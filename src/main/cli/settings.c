@@ -87,6 +87,7 @@
 #include "pg/sdio.h"
 #include "pg/stats.h"
 #include "pg/board.h"
+#include "pg/freq.h"
 
 #include "rx/rx.h"
 #include "rx/cc2500_frsky_common.h"

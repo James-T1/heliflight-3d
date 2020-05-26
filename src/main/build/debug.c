@@ -95,4 +95,5 @@ const char * const debugModeNames[DEBUG_COUNT] = {
     "FF_LIMIT",
     "FF_INTERPOLATED",
     "BLACKBOX_OUTPUT",
+    "FREQSENSOR",
 };
