@@ -479,16 +479,16 @@ void servoMixer(void)
     // HF3D TODO:  Be very cautious of increasing PID_SERVO_MIXER_SCALING in the future code!!  
     //   ** Users may unexpectedly end up with more cyclic pitch than they originally setup if you change it!
     //   Maybe change the max criteria to something else?  It's actually the physical servo output we want to limit...
-    if (swashRingTotal > (currentPidProfile->pidSumLimit * PID_SERVO_MIXER_SCALING)) {
-        // normalize the roll and pitch values using the maximum if the sum exceeds our max expected value
-        input[INPUT_STABILIZED_ROLL] = input[INPUT_STABILIZED_ROLL] * ABS(input[INPUT_STABILIZED_ROLL]) / swashRingTotal;
-        input[INPUT_STABILIZED_PITCH] = input[INPUT_STABILIZED_PITCH] * ABS(input[INPUT_STABILIZED_PITCH]) / swashRingTotal;
-    }
+    // HF3D TODO:  
+    const float swashRingLimit = currentPidProfile->pidSumLimit * PID_SERVO_MIXER_SCALING;
+    if (swashRingTotal > swashRingLimit) {
+        // Limit deflection off-axis if total requested servo deflection is greater than the maximum deflection on any one axis.
+        input[INPUT_STABILIZED_ROLL] = input[INPUT_STABILIZED_ROLL] * swashRingLimit / swashRingTotal;
+        input[INPUT_STABILIZED_PITCH] = input[INPUT_STABILIZED_PITCH] * swashRingLimit / swashRingTotal;
+    }    
     // NOTE:  pidSumLimit for roll & pitch should be increased until exactly 10 degrees of cyclic pitch is achieved at maximum swash deflection and zero collective pitch
-    //   It's best to start low with pidSumLimit and then increase it while continuing to measure total pitch.  This avoids damage to servos from binding.
-    //   Warning:  More than 10 degrees of available cyclic pitch can lead to boom strikes!!!
-
-
+    //   .... Actually, maybe the rates should be increased/decreased instead of pidSumLimit.  This would allow very similar gains to be used across different size helis as long as max cyclic pitch is similar.
+    
     // HF3D:  Override servo mixer inputs if user asks us to (via CLI or MSP/Configurator)
     //   "servo_input_override ON" sets servo_input_override[4] to 1.  OFF sets it to 0.
     //   "servo_input_override 0 50" sets collective input to 50 (inputs are generally on a -500 to +500 range)
@@ -496,8 +496,8 @@ void servoMixer(void)
     if (!ARMING_FLAG(ARMED) && servo_input_override[4]) {
 
         input[INPUT_RC_AUX1] = servo_input_override[0];  // Put collective on the first override since it will be the most common
-        input[INPUT_STABILIZED_ROLL] = servo_input_override[1];
-        input[INPUT_STABILIZED_PITCH] = servo_input_override[2];
+        input[INPUT_STABILIZED_ROLL] = servo_input_override[1] * PID_SERVO_MIXER_SCALING;
+        input[INPUT_STABILIZED_PITCH] = servo_input_override[2] * PID_SERVO_MIXER_SCALING;
         input[INPUT_STABILIZED_YAW] = servo_input_override[3];
 
     }
