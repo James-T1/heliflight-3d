@@ -109,6 +109,8 @@
 
 #define USE_ADC
 
+#define USE_FREQ_SENSOR
+
 #define USE_RX_SPI
 
 #define USE_RX_FRSKY_SPI_D

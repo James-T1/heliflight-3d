@@ -71,6 +71,7 @@
 #include "pg/rx.h"
 #include "pg/rx_spi.h"
 #include "pg/sdcard.h"
+#include "pg/freq.h"
 
 #include "rx/rx.h"
 #include "rx/rx_spi.h"
