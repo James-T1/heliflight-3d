@@ -47,6 +47,7 @@
 #include "rpm_filter.h"
 
 #include "sensors/esc_sensor.h"
+#include "drivers/freq.h"
 
 // HF3D:  Increasing MAXHARMONICS from 3 to 12 took ITCM_RAM from 15,472B @ 94.43% used to 17,680B @ 107.91% used.
 // Reducing from 12 to 9 took it down to 16,944B with 103.42% used
@@ -167,9 +168,13 @@ void rpmFilterInit(const rpmFilterConfig_t *config)
     // HF3D TODO:  Make all the RPM filter code work even if we weren't built with USE_DSHOT.
     if (motorConfig()->dev.useDshotTelemetry) {
         rpmSource = 0;
-    // HF3D TODO:  Add an RPM sensor input to the if chain once we support them
-    // The check below doesn't work because escSensorInit() isn't called until after rpmFilterInit
-    //} else if (isEscSensorActive()) {
+#ifdef USE_FREQ_SENSOR
+    // Can't actually check if it initialized properly because Freq sensor is initialized after rpm_filter
+    } else if (featureIsEnabled(FEATURE_FREQ_SENSOR)) {
+        rpmSource = 1;
+#endif
+    // Can't check to see if ESC Sensor is initialized propertly because escSensorInit() isn't called until after rpmFilterInit
+    //   } else if (isEscSensorActive()) {
     } else if (featureIsEnabled(FEATURE_ESC_SENSOR)) {
         rpmSource = 2;
     } else {
@@ -276,7 +281,10 @@ FAST_CODE_NOINLINE void rpmFilterUpdate()
         uint16_t motorRpm = 0;
         if (rpmSource == 0) {
             motorRpm = getDshotTelemetry(motor);
-        // HF3D TODO:  Add support for RPM sensor to the if chain here once we support it.
+#ifdef USE_FREQ_SENSOR
+        } else if (rpmSource == 1) {
+            motorRpm = freqGetERPM(motor);
+#endif
         } else if (rpmSource == 2) {
             motorRpm = getEscSensorRPM(motor);
         } else {

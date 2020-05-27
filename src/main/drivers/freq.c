@@ -246,4 +246,18 @@ float freqRead(uint8_t port)
     return 0.0f;
 }
 
+uint16_t freqGetERPM(uint8_t port)
+{
+    // HF3D TODO:  Most things that read this value are requesting it based on Motor number, which may or may not coincide with the RPM sensor.
+    //   May not be an issue for most helis since they will only have one main motor and either an RPM sensor on the ESC/motor leads, or on the main shaft.
+    
+    if (port < FREQ_SENSOR_PORT_COUNT) {
+        // Return eRPM/100 as expected by RPM filter, msp, etc.
+        return (uint16_t) (freqInputPorts[port].freq * 60.0f / 100.0f);
+    }
+    
+    return 0;    
+    
+}
+
 #endif
