@@ -123,7 +123,9 @@ static void freqReset(freqInputPort_t *input)
     
     DEBUG_SET(DEBUG_FREQSENSOR, 0, input->period);
     DEBUG_SET(DEBUG_FREQSENSOR, 1, 0);
+#ifdef USE_DSHOT_TELEMETRY
     DEBUG_SET(DEBUG_FREQSENSOR, 2, getDshotTelemetry(0));
+#endif
     //DEBUG_SET(DEBUG_FREQSENSOR, 2, 32 - __builtin_clz(input->prescaler));
     DEBUG_SET(DEBUG_FREQSENSOR, 3, lrintf(input->freq));
 }
@@ -154,7 +156,9 @@ static void freqInputUpdate(freqInputPort_t *input, uint16_t period)
     
     DEBUG_SET(DEBUG_FREQSENSOR, 0, input->period);
     DEBUG_SET(DEBUG_FREQSENSOR, 1, period);
+#ifdef USE_DSHOT_TELEMETRY
     DEBUG_SET(DEBUG_FREQSENSOR, 2, getDshotTelemetry(0));
+#endif
     //DEBUG_SET(DEBUG_FREQSENSOR, 2, 32 - __builtin_clz(input->prescaler));
     DEBUG_SET(DEBUG_FREQSENSOR, 3, lrintf(input->freq));
 }

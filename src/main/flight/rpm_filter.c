@@ -277,7 +277,7 @@ FAST_CODE_NOINLINE void rpmFilterUpdate()
 
     // Loop over all the motors and low-pass filter their RPM values to stabilize it
     for (int motor = 0; motor < getMotorCount(); motor++) {
-        // Get the motor eRPM using bi-directional DSHOT and then filter it using PT1 low-pass filter
+        // Get motor eRPM/100 from our RPM signal source and then filter it using PT1 low-pass filter
         uint16_t motorRpm = 0;
         if (rpmSource == 0) {
             motorRpm = getDshotTelemetry(motor);

@@ -21,6 +21,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include "platform.h"
 
@@ -76,7 +77,9 @@ PG_REGISTER_WITH_RESET_TEMPLATE(escSensorConfig_t, escSensorConfig, PG_ESC_SENSO
 
 PG_RESET_TEMPLATE(escSensorConfig_t, escSensorConfig,
         .halfDuplex = 0,
-        .escSensorProtocol = 0
+        .escSensorProtocol = 0,
+        .esc_sensor_hobbywing_curroffset = 15,
+        .esc_sensor_hobbywing_voltagedivisor = 11,
 );
 
 /*
@@ -172,8 +175,8 @@ bool isEscSensorValid(uint8_t motorNumber)
         }
     
     } else if ( escSensorConfig()->escSensorProtocol == ESC_SENSOR_PROTOCOL_HOBBYWINGV4 ) {
-        // HWV4:  dataAge < 100 while disarmed  or  dataAge < 11 while armed
-        //   Realistically we get these every 40 while disarmed and 4 while motor is spinning (rpm>0)
+        // HWV4:  dataAge < 100 while throttle=0  or  dataAge < 11 while motor spinning
+        //   Realistically we get these every 40 while throttle=0 and 4 while motor is spinning (rpm>0)
         uint8_t thisDataAge = 0;
         uint16_t thisRPM = 0;
         
@@ -191,7 +194,7 @@ bool isEscSensorValid(uint8_t motorNumber)
         // HF3D TODO:  This will break if scheduler is changed to increase polling rate of escSensorProcess task beyond 100Hz.
         if (thisRPM > 0 && thisDataAge < 11) {
             return 1;
-        } else if (thisRPM == 0 && thisDataAge < 100) {
+        } else if (thisRPM == 0 && thisDataAge < 120) {
             return 1;
         }
     
@@ -428,72 +431,50 @@ bool processHWv4TelemetryStream(uint8_t dataByte)
         if (bytesRead == 19) {
             bytesRead = 0;
             return 1;  // Successfully finished reading a telemetry packet... to the best of our ability to distinguish one.  Return true.
-            DEBUG_SET(DEBUG_ESC_SENSOR, DEBUG_ESC_MOTOR_INDEX, escSensorMotor + 1);
         }
     }
     return 0;      // No complete telemetry packet ready yet
 }
 
+float calcVoltHW(uint16_t voltRaw)
+{
+    // Credit to:  https://github.com/dgatf/msrc/
+    return (float) ESCHW4_V_REF * voltRaw / ESCHW4_ADC_RESOLUTION * escSensorConfig()->esc_sensor_hobbywing_voltagedivisor;    
+}
+
 float calcTempHW(uint16_t tempRaw)
 {
-    // HF3D TODO:  Only Hobbywing and God knows if this is right.
-    uint16_t tempFunc[26][2] =
-        {{0, 1},
-         {14, 2},
-         {28, 3},
-         {58, 5},
-         {106, 8},
-         {158, 11},
-         {234, 15},
-         {296, 18},
-         {362, 21},
-         {408, 23},
-         {505, 27},
-         {583, 30},
-         {664, 33},
-         {720, 35},
-         {807, 38},
-         {897, 41},
-         {1021, 45},
-         {1150, 49},
-         {1315, 54},
-         {1855, 70},
-         {1978, 74},
-         {2239, 82},
-         {2387, 87},
-         {2472, 90},
-         {2656, 97},
-         {2705, 99}};
-    if (tempRaw > 3828)
+    // Credit to:  https://github.com/dgatf/msrc/
+    float voltage = tempRaw * ESCHW4_V_REF / ESCHW4_ADC_RESOLUTION;
+    float ntcR_Rref = (voltage * ESCHW4_NTC_R1 / (ESCHW4_V_REF - voltage)) / ESCHW4_NTC_R_REF;
+    // If log() function needs to be faster, just add code!
+    //  https://github.com/chipaudette/OpenAudio_blog/blob/e3ea36ba069b924be81cf68a7279cb9e767bf16d/2017-02-07%20Faster%20Float%20Functions/SpeedOfFloatFunctions/SpeedOfFloatFunctions.ino#L405
+    //  http://openaudio.blogspot.com/2017/02/faster-log10-and-pow.html
+    float temperature = 1.0 / ((float)log(ntcR_Rref) / ESCHW4_NTC_BETA + 1.0 / 298.15) - 273.15;
+    if (temperature < 0) {
         return 0;
-    if (tempRaw < 1123)
-        return 100;
-    tempRaw = 3828 - tempRaw;
-    uint8_t i = 0;
-    while (i < 26 && tempRaw >= tempFunc[i][0])
-    {
-        i++;
     }
-    return tempFunc[i - 1][1] + (tempFunc[i][1] - tempFunc[i - 1][1]) * (float)(tempRaw - tempFunc[i - 1][0]) / (tempFunc[i][0] - tempFunc[i - 1][0]);
+    return temperature;
 }
 
 float calcCurrHW(uint16_t currentRaw)
 {
-    if (currentRaw > 28)
-    {
-        return (float)(currentRaw - 28) / 610;
-    }
-    else
+    // Credit to:  https://github.com/dgatf/msrc/
+    if (currentRaw > escSensorConfig()->esc_sensor_hobbywing_curroffset) {
+        return (float)(currentRaw - escSensorConfig()->esc_sensor_hobbywing_curroffset) * ESCHW4_V_REF / (ESCHW4_DIFFAMP_GAIN * ESCHW4_DIFFAMP_SHUNT * ESCHW4_ADC_RESOLUTION);
+    } else {
         return 0;
+    }
 }
 
 void escSensorProcess(timeUs_t currentTimeUs)
 {
+    // Executed from tasks.c at 100Hz with Low priority
+
     // Variables for Hobbywing V4 telemetry
-    static timeMs_t lastProcessTimeMs = 0;
+    static timeUs_t lastProcessTimeUs = 0;
     static float consumption = 0.0f;
     
-    // Executed from tasks.c at 100Hz with Low priority
     const timeMs_t currentTimeMs = currentTimeUs / 1000;
 
     if (!escSensorPort || !motorIsEnabled()) {
@@ -572,16 +553,18 @@ void escSensorProcess(timeUs_t currentTimeUs)
             // and process them one by one to build a telemetryData packet
             if (processHWv4TelemetryStream(serialRead(escSensorPort))) {
 
-                // Thanks goes to:  https://github.com/dgatf/msrc/blob/73444dfd2952e17d36a1d73dfa55a57445cc43aa/README.md
-                
+                //  Credit to:  https://github.com/dgatf/msrc/
+
                 // If this evaluated true then we have a potentially valid Telemetry data frame waiting for us.  Process it.
                 // uint32_t packetNumber = (uint32_t)data[0] << 16 | (uint16_t)data[1] << 8 | data[2];
                 // HF3D TODO:  Debug log this data, including packet number?  Might be useful to see if we're getting the right data if we up the telemetry process speed in the tasks scheduler.
                 //uint16_t thr = (uint16_t)telemetryData[3] << 8 | telemetryData[4]; // 0-1024
                 //uint16_t pwm = (uint16_t)telemetryData[5] << 8 | telemetryData[6]; // 0-1024
                 float rpm = (uint32_t)telemetryData[7] << 16 | (uint16_t)telemetryData[8] << 8 | telemetryData[9];
-                float voltage = (float)((uint16_t)telemetryData[10] << 8 | telemetryData[11]) / 113;
+                float voltage = calcVoltHW((uint16_t)telemetryData[10] << 8 | telemetryData[11]);
                 float current = calcCurrHW((uint16_t)telemetryData[12] << 8 | telemetryData[13]);
+                // Debug log the raw current value to the MOTOR_INDEX field for determining offset calculations
+                DEBUG_SET(DEBUG_ESC_SENSOR, DEBUG_ESC_MOTOR_INDEX, (uint16_t)telemetryData[12] << 8 | telemetryData[13]);
                 float tempFET = calcTempHW((uint16_t)telemetryData[14] << 8 | telemetryData[15]);
                 //float tempBEC = calcTempHW((uint16_t)telemetryData[16] << 8 | telemetryData[17]);
 
@@ -607,21 +590,24 @@ void escSensorProcess(timeUs_t currentTimeUs)
                     DEBUG_SET(DEBUG_ESC_SENSOR_TMP, escSensorMotor, escSensorData[escSensorMotor].temperature);
                 }
                 
+                // Increment counter every time we decode a Hobbywing telemetry packet
                 DEBUG_SET(DEBUG_ESC_SENSOR, DEBUG_ESC_NUM_CRC_ERRORS, ++totalCrcErrorCount);
 
             }
             
+            // Increment counter every time a new byte is read over the uart
             DEBUG_SET(DEBUG_ESC_SENSOR, DEBUG_ESC_NUM_TIMEOUTS, ++totalTimeoutCount);
             
         }
-        
+
+        // Log the data age to see how old the data gets between HW telemetry packets
         DEBUG_SET(DEBUG_ESC_SENSOR, DEBUG_ESC_DATA_AGE, escSensorData[escSensorMotor].dataAge);
         
         // Accumulate consumption (mAh) as a float since we're updating at 100Hz... even 100A for 10ms is only 0.28 mAh.
         //  Calculate it using the last valid current reading we received
-        consumption += (currentTimeMs - lastProcessTimeMs) * (float) escSensorData[escSensorMotor].current * 10.0f / (1000.0f * 3600.0f);
+        consumption += (currentTimeUs - lastProcessTimeUs) * (float) escSensorData[escSensorMotor].current * 10.0f / (1000000.0f * 3600.0f);
+        lastProcessTimeUs = currentTimeUs;
         escSensorData[escSensorMotor].consumption = (int32_t) consumption;
-        lastProcessTimeMs = currentTimeMs;
         
     }  // End of HobbyWing V4 Telemetry
 
