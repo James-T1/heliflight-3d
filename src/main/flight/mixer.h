@@ -123,6 +123,8 @@ float mixerGetThrottle(void);
 mixerMode_e getMixerMode(void);
 bool isFixedWing(void);
 
+extern float headspeed;
+
 // HF3D
 uint8_t isHeliSpooledUp(void);
 float mixerGetGovGearRatio(void);

@@ -670,6 +670,7 @@ static FAST_RAM_ZERO_INIT float govI = 0;
 static FAST_RAM_ZERO_INIT float govCollectiveFF = 0;
 static FAST_RAM_ZERO_INIT float govCollectivePulseFF = 0;
 static FAST_RAM_ZERO_INIT timeMs_t lastSpoolEndTime = 0;
+float FAST_RAM_ZERO_INIT headspeed = 0;
 
 static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t *activeMixer)
 {
@@ -705,7 +706,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
 #else
         float mainMotorRPM = 0.0f;
 #endif        
-        float headspeed = mainMotorRPM / govGearRatio;
+        headspeed = mainMotorRPM / govGearRatio;
         
         // Some logic to help us come back from a stage 1 failsafe / glitch / RPM loss / accidental throttle hold quickly
         // We're going to use this time to lock in our spooledUp state for a few seconds after throttle = 0 when we were just spooledUp on the last pass through
