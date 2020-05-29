@@ -1700,7 +1700,7 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
             // Apply elevator filter to stop bounces due to sudden stops on the pitch axis near zero deg/s
             //  These do not seem to be related to I term or Absolute control, or really any of the PID terms
             //  High feedforward gain seems to make them worse due to the aggressive nature of the return to zero.
-            if (axis == FD_PITCH && pidProfile->elevator_filter_gain > 0) {
+            if (axis == FD_PITCH && elevator_filter_gain > 0) {
                 
                 float elevatorSetpointLPF = elevatorFilterLowpassApplyFn((filter_t *) &elevatorFilterLowpass, currentPidSetpoint);
                 
@@ -1708,7 +1708,7 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
                 if (fabsf(currentPidSetpoint) >= pidProfile->elevator_filter_window_size) {
                     lastTimeEleOutsideWindow = currentTimeUs;
             
-                } else if (cmpTimeUs(currentTimeUs, lastTimeEleOutsideWindow) < (pidProfile->elevator_filter_window_time * 1000)) {
+                } else if (cmpTimeUs(currentTimeUs, lastTimeEleOutsideWindow) < (pidProfile->elevator_filter_window_time * 1000) {
                     // We're inside the deg/s window and we've recently been outside of it
                     // Cutoff time for compare should be maybe 2-3x the cutoff frequency period??
                     //  Note that this will also catch the times that we're just transiting through center quickly... which sucks, but what is the other choice??
