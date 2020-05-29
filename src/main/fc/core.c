@@ -47,6 +47,7 @@
 #include "drivers/sound_beeper.h"
 #include "drivers/system.h"
 #include "drivers/time.h"
+#include "drivers/freq.h"
 
 #include "config/config.h"
 #include "fc/controlrate_profile.h"
@@ -320,8 +321,9 @@ void updateArmingStatus(void)
 
 #ifdef USE_RPM_FILTER
         // USE_RPM_FILTER will only be defined if USE_DSHOT and USE_DSHOT_TELEMETRY are defined
-        // If the RPM filter is anabled and any motor isn't providing telemetry, then disable arming
-        if (isRpmFilterEnabled() && !isDshotTelemetryActive()) {
+        // If the RPM filter is enabled and we aren't getting telemetry from at least one source, then disable arming
+        // HF3D TODO:  Use ifdefs for freq sensor / esc sensors / etc.
+        if (isRpmFilterEnabled() && (!isDshotTelemetryActive() && !isEscSensorActive() && !isFreqSensorInitialized())) {
             setArmingDisabled(ARMING_DISABLED_RPMFILTER);
         } else {
             unsetArmingDisabled(ARMING_DISABLED_RPMFILTER);

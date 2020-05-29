@@ -78,6 +78,7 @@
 #define UPDATE_PERIOD_FILTER(_input,_per) \
     FILTER_UPDATE((_input)->period, _per, FREQ_PERIOD_COEFF)
 
+bool freqTimerInitialized = false;
 
 typedef struct {
 
@@ -210,6 +211,7 @@ void freqICConfig(const timerHardware_t *timer, bool rising, uint16_t filter)
     sInitStructure.ICFilter = filter;
     HAL_TIM_IC_ConfigChannel(handle, &sInitStructure, timer->channel);
     HAL_TIM_IC_Start_IT(handle, timer->channel);
+
 }
 #else
 // TODO
@@ -238,6 +240,8 @@ void freqInit(const freqConfig_t *freqConfig)
             
             freqICConfig(timer, true, 4);
             freqReset(input);
+
+            freqTimerInitialized = true;
         }
     }
 }
@@ -262,6 +266,11 @@ uint16_t freqGetERPM(uint8_t port)
     
     return 0;    
     
+}
+
+bool isFreqSensorInitialized(void)
+{
+    return freqTimerInitialized;
 }
 
 #endif
