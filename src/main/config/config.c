@@ -469,6 +469,10 @@ static void validateAndFixConfig(void)
     featureDisableImmediate(FEATURE_ESC_SENSOR);
 #endif
 
+#ifndef USE_FREQ_SENSOR
+    featureDisableImmediate(FEATURE_FREQ_SENSOR);
+#endif
+
 #ifndef USE_GYRO_DATA_ANALYSE
     featureDisableImmediate(FEATURE_DYNAMIC_FILTER);
 #endif
