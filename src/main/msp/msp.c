@@ -1100,7 +1100,7 @@ static bool mspProcessOutCommand(uint8_t cmdMSP, sbuf_t *dst)
 #ifdef USE_FREQ_SENSOR
             if (featureIsEnabled(FEATURE_FREQ_SENSOR)) {
                 if (!rpmDataAvailable) {  // We want DSHOT telemetry RPM data (if available) to have precedence
-                    rpm = freqGetERPM(i) * 100 * 2 / motorConfig()->motorPoleCount;
+                    rpm = (int)getFreqSensorRPM(i) * 100 * 2 / motorConfig()->motorPoleCount;
                     rpmDataAvailable = true;
                 }
             }
