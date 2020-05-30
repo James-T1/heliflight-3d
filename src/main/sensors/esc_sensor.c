@@ -603,6 +603,12 @@ void escSensorProcess(timeUs_t currentTimeUs)
         // Log the data age to see how old the data gets between HW telemetry packets
         DEBUG_SET(DEBUG_ESC_SENSOR, DEBUG_ESC_DATA_AGE, escSensorData[escSensorMotor].dataAge);
         
+        // Hobbywing just reports the last current reading it had when throttle goes to zero.  That's completely useless, so set it to zero.
+        // HF3D TODO:  Consider reading the actual throttle telemetry from the HW ESC protocol instead of RPM to make this more resistant to error?
+        if (escSensorData[escSensorMotor].rpm < 1) {
+            escSensorData[escSensorMotor].current = 0.0f;
+        }
+        
         // Accumulate consumption (mAh) as a float since we're updating at 100Hz... even 100A for 10ms is only 0.28 mAh.
         //  Calculate it using the last valid current reading we received
         consumption += (currentTimeUs - lastProcessTimeUs) * (float) escSensorData[escSensorMotor].current * 10.0f / (1000000.0f * 3600.0f);
