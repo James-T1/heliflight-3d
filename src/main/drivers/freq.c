@@ -212,6 +212,8 @@ void freqICConfig(const timerHardware_t *timer, bool rising, uint16_t filter)
     HAL_TIM_IC_ConfigChannel(handle, &sInitStructure, timer->channel);
     HAL_TIM_IC_Start_IT(handle, timer->channel);
 
+    freqTimerInitialized = true;
+
 }
 #else
 // TODO
@@ -240,8 +242,6 @@ void freqInit(const freqConfig_t *freqConfig)
             
             freqICConfig(timer, true, 4);
             freqReset(input);
-
-            freqTimerInitialized = true;
         }
     }
 }
