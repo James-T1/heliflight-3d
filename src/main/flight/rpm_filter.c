@@ -168,11 +168,9 @@ void rpmFilterInit(const rpmFilterConfig_t *config)
     // HF3D TODO:  Make all the RPM filter code work even if we weren't built with USE_DSHOT.
     if (motorConfig()->dev.useDshotTelemetry) {
         rpmSource = 0;
-#ifdef USE_FREQ_SENSOR
     // Can't actually check if it initialized properly because Freq sensor is initialized after rpm_filter
     } else if (featureIsEnabled(FEATURE_FREQ_SENSOR)) {
         rpmSource = 1;
-#endif
     // Can't check to see if ESC Sensor is initialized propertly because escSensorInit() isn't called until after rpmFilterInit
     //   } else if (isEscSensorActive()) {
     } else if (featureIsEnabled(FEATURE_ESC_SENSOR)) {
@@ -283,7 +281,7 @@ FAST_CODE_NOINLINE void rpmFilterUpdate()
             motorRpm = getDshotTelemetry(motor);
 #ifdef USE_FREQ_SENSOR
         } else if (rpmSource == 1) {
-            motorRpm = freqGetERPM(motor);
+            motorRpm = getFreqSensorRPM(motor);
 #endif
         } else if (rpmSource == 2) {
             motorRpm = getEscSensorRPM(motor);
