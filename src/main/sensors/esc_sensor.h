@@ -44,7 +44,8 @@ typedef struct escSensorConfig_s {
     uint16_t offset;                // offset consumed by the flight controller / VTX / cam / ... in milliamperes
     uint8_t escSensorProtocol;      // ESC telemetry protocol selection
     uint16_t esc_sensor_hobbywing_curroffset;    // HobbyWing V4 raw current offset (depends on specific HWV4 ESC)
-    uint8_t esc_sensor_hobbywing_voltagedivisor;   // HobbyWing V4 voltage divisor (11 for LV ESCs, 21 for HV ESCs)
+    uint8_t esc_sensor_hobbywing_voltagedivisor; // HobbyWing V4 voltage divisor (11 for LV ESCs, 21 for HV ESCs)
+    uint8_t esc_sensor_hobbywing_currscale;      // HobbyWing V4 current scaling (100 = 1.0 times the default scaling)
 } escSensorConfig_t;
 
 PG_DECLARE(escSensorConfig_t, escSensorConfig);

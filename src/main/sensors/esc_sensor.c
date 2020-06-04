@@ -80,6 +80,7 @@ PG_RESET_TEMPLATE(escSensorConfig_t, escSensorConfig,
         .escSensorProtocol = 0,
         .esc_sensor_hobbywing_curroffset = 15,
         .esc_sensor_hobbywing_voltagedivisor = 11,
+        .esc_sensor_hobbywing_currscale = 124,                                      
 );
 
 /*
@@ -461,7 +462,7 @@ float calcCurrHW(uint16_t currentRaw)
 {
     // Credit to:  https://github.com/dgatf/msrc/
     if (currentRaw > escSensorConfig()->esc_sensor_hobbywing_curroffset) {
-        return (float)(currentRaw - escSensorConfig()->esc_sensor_hobbywing_curroffset) * ESCHW4_V_REF / (ESCHW4_DIFFAMP_GAIN * ESCHW4_DIFFAMP_SHUNT * ESCHW4_ADC_RESOLUTION);
+        return (float)(currentRaw - escSensorConfig()->esc_sensor_hobbywing_curroffset) * (escSensorConfig()->esc_sensor_hobbywing_currscale / 100.0f) * ESCHW4_V_REF / (ESCHW4_DIFFAMP_GAIN * ESCHW4_DIFFAMP_SHUNT * ESCHW4_ADC_RESOLUTION);
     } else {
         return 0;
     }
