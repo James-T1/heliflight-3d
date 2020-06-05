@@ -1770,7 +1770,6 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
             
             // Collective pitch impulse feed-forward for the main motor
             // Run our collectiveStickPercent through a low pass filter
-            // HF3D TODO:  Pulse filter calc should probably be moved to PID?  But it probably shouldn't be a profile setting?
             collectiveStickLPF = collectiveStickLPF + collectivePulseFilterGain * (collectiveStickPercent - collectiveStickLPF);
             // Subtract LPF from the original value to get a high pass filter
             // HPF value will be <60% or so of the collectiveStickPercent, and will be smaller the slower the stick movement is.
@@ -1783,9 +1782,6 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
             float tailCollectivePulseFF = -1.0f * collectiveStickHPF * pidProfile->yawColPulseKf / 100.0f;
             float tailBaseThrust = -1.0f * pidProfile->yawBaseThrust / 10.0f;
             
-            // HF3D TODO:  Add cyclic feedforward for yaw
-            // float tailCyclicFF = ...
-			
             // Calculate absolute value of the percentage of cyclic stick throw (both combined... but swash ring is the real issue).
 			float tailCyclicFF = -1.0f * servosGetSwashRingValue() * 100.0f * pidProfile->yawCycKf / 100.0f;
             
@@ -1813,14 +1809,12 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
             //   can spin up the tail blades relative to the other pieces of the puzzle.
             
             // Add our collective feedforward terms into the yaw axis pidSum as long as we don't have a motor driven tail
-            if (getMotorCount() == 1) {
-                // Only if we're armed and throttle > 15 use the tail feedforwards.  If we're auto-rotating then there's no use for all this stuff.  It will just screw up our tail position since there's no main motor torque!!
-                // HF3D TODO:  Add a configurable override for this check in case someone wants to run an external governor without passing the throttle signal through the flight controller?
-                if ((calculateThrottlePercentAbs() > 15) || (!ARMING_FLAG(ARMED))) {
-                    // if disarmed, show the user what they will get regardless of throttle value
-                    pidData[FD_YAW].F += tailCollectiveFF + tailCollectivePulseFF + tailBaseThrust + tailCyclicFF;
-                } 
-            }
+            // Only if we're armed and throttle > 15 use the tail feedforwards.  If we're auto-rotating then there's no use for all this stuff.  It will just screw up our tail position since there's no main motor torque!!
+            // HF3D TODO:  Add a configurable override for this check in case someone wants to run an external governor without passing the throttle signal through the flight controller?
+            if ((calculateThrottlePercentAbs() > 15) || (!ARMING_FLAG(ARMED))) {
+                // if disarmed, show the user what they will get regardless of throttle value
+                pidData[FD_YAW].F += tailCollectiveFF + tailCollectivePulseFF + tailBaseThrust + tailCyclicFF;
+            } 
             // HF3D TODO:  Do some integration of the motor driven tail code here for motorCount == 2...
             //   But have to be careful, because if main motor throttle goes near zero then we'll never get the tail back if we're
             //   adding feedforward that doesn't need to be there.  We can't create negative thrust with a motor driven fixed pitch tail.
