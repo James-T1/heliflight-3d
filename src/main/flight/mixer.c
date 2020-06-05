@@ -1142,13 +1142,13 @@ FAST_CODE_NOINLINE void mixTable(timeUs_t currentTimeUs, uint8_t vbatPidCompensa
 
     const bool airmodeEnabled = airmodeIsEnabled();
 
-#ifdef USE_YAW_SPIN_RECOVERY
-    // 50% throttle provides the maximum authority for yaw recovery when airmode is not active.
-    // When airmode is active the throttle setting doesn't impact recovery authority.
-    if (yawSpinDetected && !airmodeEnabled) {
-        throttle = 0.5f;   // 
-    }
-#endif // USE_YAW_SPIN_RECOVERY
+//#ifdef USE_YAW_SPIN_RECOVERY
+//    // 50% throttle provides the maximum authority for yaw recovery when airmode is not active.
+//    // When airmode is active the throttle setting doesn't impact recovery authority.
+//    if (yawSpinDetected && !airmodeEnabled) {
+//        throttle = 0.5f;   // 
+//    }
+//#endif // USE_YAW_SPIN_RECOVERY
 
     // Find roll/pitch/yaw desired output
     float motorMix[MAX_SUPPORTED_MOTORS];
@@ -1168,6 +1168,7 @@ FAST_CODE_NOINLINE void mixTable(timeUs_t currentTimeUs, uint8_t vbatPidCompensa
 
     //pidUpdateAntiGravityThrottleFilter(throttle);
 
+    // HF3D TODO:  Fix this for use with Helicopters (make dependent on headspeed or remove functionality)
 #ifdef USE_DYN_LPF
     updateDynLpfCutoffs(currentTimeUs, throttle);
 #endif
