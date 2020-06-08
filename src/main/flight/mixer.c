@@ -76,7 +76,7 @@ PG_RESET_TEMPLATE(mixerConfig_t, mixerConfig,
     .yaw_motors_reversed = false,
     .crashflip_motor_percent = 0,
     .gov_max_headspeed = 7000,
-    .gov_gear_ratio = 100,
+    .gov_gear_ratio = 1000,
     .gov_p_gain = 0,
     .gov_i_gain = 0,
     .gov_cyclic_ff_gain = 0,
@@ -396,7 +396,7 @@ void mixerInit(mixerMode_e mixerMode)
     //rampRate = pidGetDT() / (float)mixerConfig()->spoolup_time;
     // HF3D TODO:  lol... rampRate STILL not working.  Wtf.
     govMaxHeadspeed = mixerConfig()->gov_max_headspeed;     // stays uint16_t
-    govGearRatio = (float)mixerConfig()->gov_gear_ratio / 100.0f;
+    govGearRatio = (float)mixerConfig()->gov_gear_ratio / 1000.0f;
     govKp = (float)mixerConfig()->gov_p_gain / 10.0f;
     govKi = (float)mixerConfig()->gov_i_gain / 10.0f;
     govCycKf = (float)mixerConfig()->gov_cyclic_ff_gain / 100.0f;
@@ -674,6 +674,8 @@ float FAST_RAM_ZERO_INIT headspeed = 0;
 
 static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t *activeMixer)
 {
+    UNUSED(activeMixer);
+
     // HF3D: Re-wrote this section for main and optional tail motor use.  No longer valid for multirotors.
     //   Main motor must be motor[0] (Motor 0)
     //     * Use resource assignment to reassign output pin on board for main motor ESC to Motor 1

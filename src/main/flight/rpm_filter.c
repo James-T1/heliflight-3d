@@ -127,8 +127,8 @@ void rpmFilterInit(const rpmFilterConfig_t *config)
     currentMotor = currentHarmonic = currentFilterNumber = 0;
     currentFilter = &filters[0];
 
-    if (config->rpm_tail_gear_ratio > 100) {
-        tailGearRatio = config->rpm_tail_gear_ratio / 100.0f;
+    if (config->rpm_tail_gear_ratio > 1000) {
+        tailGearRatio = config->rpm_tail_gear_ratio / 1000.0f;
     } else {
         tailGearRatio = 4.5;  // HF3D: This won't harm
     }
