@@ -39,6 +39,7 @@
 
 #include "drivers/dshot.h"
 #include "drivers/motor.h"
+#include "drivers/freq.h"
 #include "drivers/time.h"
 #include "drivers/io.h"
 
@@ -65,6 +66,7 @@
 
 #include "sensors/battery.h"
 #include "sensors/gyro.h"
+#include "sensors/esc_sensor.h"
 
 PG_REGISTER_WITH_RESET_TEMPLATE(mixerConfig_t, mixerConfig, PG_MIXER_CONFIG, 0);
 
@@ -77,6 +79,7 @@ PG_RESET_TEMPLATE(mixerConfig_t, mixerConfig,
     .crashflip_motor_percent = 0,
     .gov_max_headspeed = 7000,
     .gov_gear_ratio = 1000,
+    .gov_rpm_lpf = 50,
     .gov_p_gain = 0,
     .gov_i_gain = 0,
     .gov_cyclic_ff_gain = 0,
@@ -94,6 +97,9 @@ static FAST_RAM_ZERO_INIT uint8_t motorCount;
 
 float FAST_RAM_ZERO_INIT motor[MAX_SUPPORTED_MOTORS];
 float motor_disarmed[MAX_SUPPORTED_MOTORS];
+
+uint8_t motorRpmSource;
+pt1Filter_t motorRpmFilter[MAX_SUPPORTED_MOTORS];
 
 mixerMode_e currentMixerMode;
 static motorMixer_t currentMixer[MAX_SUPPORTED_MOTORS];
@@ -314,6 +320,11 @@ uint8_t getMotorCount(void)
     return motorCount;
 }
 
+float getFilteredMotorRPM(uint8_t motor)
+{
+    return motorRpmFilter[motor].state;
+}
+
 float getMotorMixRange(void)
 {
     //return motorMixRange;     // HF3D TODO:  Remove motorMixRange completely
@@ -411,6 +422,36 @@ void mixerInit(mixerMode_e mixerMode)
     //govBaseThrottleFilterGain = pidGetDT() / (pidGetDT() + (1 / ( 2 * 3.14159f * 0.05f)));
 }
 
+// called from init at FC startup.
+void rpmSourceInit(void)
+{
+    // HF3D: TODO make this motor specific
+#ifdef USE_DSHOT_TELEMETRY
+    if (motorConfig()->dev.useDshotTelemetry) {
+        motorRpmSource = RPM_SRC_DSHOT_TELEM;
+    }
+    else
+#endif
+#ifdef USE_FREQ_SENSOR
+    if (featureIsEnabled(FEATURE_FREQ_SENSOR)) {
+        motorRpmSource = RPM_SRC_FREQ_SENSOR;
+    }
+    else
+#endif
+#ifdef USE_ESC_SENSOR
+    if (featureIsEnabled(FEATURE_ESC_SENSOR)) {
+        motorRpmSource = RPM_SRC_ESC_SENSOR;
+    }
+    else
+#endif
+    {
+        motorRpmSource = RPM_SRC_NONE;
+    }
+
+    for (int motor=0; motor<MAX_SUPPORTED_MOTORS; motor++) {
+        pt1FilterInit(&motorRpmFilter[motor], pt1FilterGain(mixerConfig()->gov_rpm_lpf, pidGetDT()));
+    }
+}
 
 #ifndef USE_QUAD_MIXER_ONLY
 // called from init at FC startup.
@@ -704,12 +745,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
     if (motorCount > 0) {
 
         // Calculate headspeed
-#ifdef USE_RPM_FILTER
-        float mainMotorRPM = rpmGetFilteredMotorRPM(0);    // Get filtered main motor rpm from rpm_filter's source
-#else
-        float mainMotorRPM = 0.0f;
-#endif        
-        headspeed = mainMotorRPM / govGearRatio;
+        headspeed = getFilteredMotorRPM(0) / govGearRatio;
         
         // Some logic to help us come back from a stage 1 failsafe / glitch / RPM loss / accidental throttle hold quickly
         // We're going to use this time to lock in our spooledUp state for a few seconds after throttle = 0 when we were just spooledUp on the last pass through
@@ -950,9 +986,7 @@ static void applyMixToMotors(float motorMix[MAX_SUPPORTED_MOTORS], motorMixer_t 
         DEBUG_SET(DEBUG_SMARTAUDIO, 0, governorSetpointLimited);
         DEBUG_SET(DEBUG_SMARTAUDIO, 1, headspeed);
         //DEBUG_SET(DEBUG_SMARTAUDIO, 2, govPidSum*1000.0f);             // Max pidsum will be around 1, so increase by 1000x
-#ifdef USE_RPM_FILTER
-        DEBUG_SET(DEBUG_SMARTAUDIO, 3, rpmGetFilteredMotorRPM(1));  // Tail motor RPM
-#endif
+        DEBUG_SET(DEBUG_SMARTAUDIO, 3, getFilteredMotorRPM(1));  // Tail motor RPM
 
         // HF3D:  Modified original code to ignore any idle offset value when scaling main motor output -- we should always ensure that the main motor will be 100% stopped at zero throttle.
         //   motorOutputMin = motorRangeMin = motorOutputLow = DSHOT_MIN_THROTTLE
@@ -1130,6 +1164,11 @@ FAST_CODE_NOINLINE void mixTable(timeUs_t currentTimeUs, uint8_t vbatPidCompensa
         // return;
     // }
 
+    // HF3D: Update motor RPM filters - TODO: move somewhere else
+    for (int motor = 0; motor < motorCount; motor++) {
+        pt1FilterApply(&motorRpmFilter[motor], getMotorRPM(motor));
+    }
+
     motorMixer_t * activeMixer = &currentMixer[0];
     
     // Calculate and Limit the PID sum
@@ -1297,3 +1336,36 @@ uint16_t mixerGetYawPidsumAssistLimit(void)
 
     return currentPidProfile->pidSumLimitYaw;
 }
+
+int getMotorRPM(uint8_t motor)
+{
+    int erpm;
+#ifdef USE_DSHOT_TELEMETRY
+    if (motorRpmSource == RPM_SRC_DSHOT_TELEM) {
+        erpm = getDshotTelemetry(motor);
+    }
+    else
+#endif
+#ifdef USE_FREQ_SENSOR
+    if (motorRpmSource == RPM_SRC_FREQ_SENSOR) {
+        erpm = getFreqSensorRPM(motor);
+    }
+    else
+#endif
+#ifdef USE_ESC_SENSOR
+    if (motorRpmSource == RPM_SRC_ESC_SENSOR) {
+        erpm = getEscSensorRPM(motor);
+    }
+    else
+#endif
+    {
+        erpm = 0;
+    }
+    return calcEscRpm(motor,erpm);
+}
+
+bool isRpmSourceActive(void)
+{
+    return (motorRpmSource != RPM_SRC_NONE);
+}
+

@@ -769,7 +769,7 @@ const clivalue_t valueTable[] = {
     { "motor_pwm_protocol",         VAR_UINT8  | MASTER_VALUE | MODE_LOOKUP, .config.lookup = { TABLE_MOTOR_PWM_PROTOCOL }, PG_MOTOR_CONFIG, offsetof(motorConfig_t, dev.motorPwmProtocol) },
     { "motor_pwm_rate",             VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 200, 32000 }, PG_MOTOR_CONFIG, offsetof(motorConfig_t, dev.motorPwmRate) },
     { "motor_pwm_inversion",        VAR_UINT8  | MASTER_VALUE | MODE_LOOKUP, .config.lookup = { TABLE_OFF_ON }, PG_MOTOR_CONFIG, offsetof(motorConfig_t, dev.motorPwmInversion) },
-    { "motor_poles",                VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 4, UINT8_MAX }, PG_MOTOR_CONFIG, offsetof(motorConfig_t, motorPoleCount) },
+    { "motor_poles",                VAR_UINT8  | MASTER_VALUE | MODE_ARRAY, .config.array.length = MAX_SUPPORTED_MOTORS, PG_MOTOR_CONFIG, offsetof(motorConfig_t, motorPoleCount) },
 
 // PG_THROTTLE_CORRECTION_CONFIG
     { "thr_corr_value",             VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0,  150 }, PG_THROTTLE_CORRECTION_CONFIG, offsetof(throttleCorrectionConfig_t, throttle_correction_value) },
@@ -847,6 +847,8 @@ const clivalue_t valueTable[] = {
     // HF3D:  Governor settings
     { "gov_max_headspeed",          VAR_UINT16 |  MASTER_VALUE,  .config.minmaxUnsigned = { 0, 10000 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, gov_max_headspeed) },
     { "gov_gear_ratio",             VAR_UINT16 |  MASTER_VALUE,  .config.minmaxUnsigned = { 1000, 30000 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, gov_gear_ratio) },
+    { "gov_rpm_lpf",                VAR_UINT16 |  MASTER_VALUE,  .config.minmaxUnsigned = { 10, 1000 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, gov_rpm_lpf) },
+
     // HF3D TODO:  Move these governor settings to profiles eventually
     { "gov_p_gain",                 VAR_UINT16 |  MASTER_VALUE,  .config.minmaxUnsigned = { 0, 500 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, gov_p_gain) },
     { "gov_i_gain",                 VAR_UINT16 |  MASTER_VALUE,  .config.minmaxUnsigned = { 0, 500 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, gov_i_gain) },
@@ -1520,14 +1522,11 @@ const clivalue_t valueTable[] = {
 #endif
 
 #ifdef USE_RPM_FILTER
-    { "gyro_rpm_notch_harmonics",  VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 10 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, gyro_rpm_notch_harmonics) },
-    { "gyro_rpm_notch_q",  VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 1, 3000 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, gyro_rpm_notch_q) },
-    { "gyro_rpm_notch_min",  VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 20, 200 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, gyro_rpm_notch_min) },
-    { "dterm_rpm_notch_harmonics",  VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 10 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, dterm_rpm_notch_harmonics) },
-    { "dterm_rpm_notch_q",  VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 1, 3000 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, dterm_rpm_notch_q) },
-    { "dterm_rpm_notch_min",  VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 40, 200 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, dterm_rpm_notch_min) },
-    { "rpm_notch_lpf",  VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 5, 500 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, rpm_lpf) },
-    { "rpm_tail_gear_ratio",  VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 10000 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, rpm_tail_gear_ratio) },
+    { "gyro_rpm_filter_bank_motor_index", VAR_UINT8  | MASTER_VALUE | MODE_ARRAY, .config.array.length = RPM_FILTER_BANK_COUNT, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, filter_bank_motor_index) },
+    { "gyro_rpm_filter_bank_gear_ratio",  VAR_UINT16 | MASTER_VALUE | MODE_ARRAY, .config.array.length = RPM_FILTER_BANK_COUNT, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, filter_bank_gear_ratio) },
+    { "gyro_rpm_filter_bank_notch_q",     VAR_UINT16 | MASTER_VALUE | MODE_ARRAY, .config.array.length = RPM_FILTER_BANK_COUNT, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, filter_bank_notch_q) },
+    { "gyro_rpm_filter_bank_min_hz",      VAR_UINT16 | MASTER_VALUE | MODE_ARRAY, .config.array.length = RPM_FILTER_BANK_COUNT, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, filter_bank_min_hz) },
+    { "gyro_rpm_filter_bank_max_hz",      VAR_UINT16 | MASTER_VALUE | MODE_ARRAY, .config.array.length = RPM_FILTER_BANK_COUNT, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, filter_bank_max_hz) },
 #endif
 
 #ifdef USE_RX_FLYSKY

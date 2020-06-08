@@ -1411,13 +1411,7 @@ static bool blackboxWriteSysinfo(void)
         BLACKBOX_PRINT_HEADER_LINE("dshot_bidir", "%d",                     motorConfig()->dev.useDshotTelemetry);
 #endif
 #ifdef USE_RPM_FILTER
-        BLACKBOX_PRINT_HEADER_LINE("gyro_rpm_notch_harmonics", "%d",        rpmFilterConfig()->gyro_rpm_notch_harmonics);
-        BLACKBOX_PRINT_HEADER_LINE("gyro_rpm_notch_q", "%d",                rpmFilterConfig()->gyro_rpm_notch_q);
-        BLACKBOX_PRINT_HEADER_LINE("gyro_rpm_notch_min", "%d",              rpmFilterConfig()->gyro_rpm_notch_min);
-        BLACKBOX_PRINT_HEADER_LINE("dterm_rpm_notch_harmonics", "%d",       rpmFilterConfig()->dterm_rpm_notch_harmonics);
-        BLACKBOX_PRINT_HEADER_LINE("dterm_rpm_notch_q", "%d",               rpmFilterConfig()->dterm_rpm_notch_q);
-        BLACKBOX_PRINT_HEADER_LINE("dterm_rpm_notch_min", "%d",             rpmFilterConfig()->dterm_rpm_notch_min);
-        BLACKBOX_PRINT_HEADER_LINE("rpm_notch_lpf", "%d",                   rpmFilterConfig()->rpm_lpf);
+        // HF3D: TODO
 #endif
 #if defined(USE_ACC)
         BLACKBOX_PRINT_HEADER_LINE("acc_lpf_hz", "%d",                 (int)(accelerometerConfig()->acc_lpf_hz * 100.0f));

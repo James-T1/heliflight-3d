@@ -1081,12 +1081,7 @@ static bool mspProcessOutCommand(uint8_t cmdMSP, sbuf_t *dst)
 
 #ifdef USE_DSHOT_TELEMETRY
             if (motorConfig()->dev.useDshotTelemetry) {
-                // HF3D TODO:  Make motorPoleCount an array for differnet main/tail pole counts, update CLI/MSP telemetry/LUA/configurator to match
-                if (i == 1) {         // Tail motor RPM calculation for OMP M2
-                    rpm = (int)getDshotTelemetry(i) * 100 * 2 / 12;
-                } else {
-                    rpm = (int)getDshotTelemetry(i) * 100 * 2 / motorConfig()->motorPoleCount;
-                }
+                rpm = calcEscRpm(i, getDshotTelemetry(i));
                 rpmDataAvailable = true;
                 invalidPct = 10000; // 100.00%
 #ifdef USE_DSHOT_TELEMETRY_STATS
@@ -1100,7 +1095,7 @@ static bool mspProcessOutCommand(uint8_t cmdMSP, sbuf_t *dst)
 #ifdef USE_FREQ_SENSOR
             if (featureIsEnabled(FEATURE_FREQ_SENSOR)) {
                 if (!rpmDataAvailable) {  // We want DSHOT telemetry RPM data (if available) to have precedence
-                    rpm = (int)getFreqSensorRPM(i) * 100 * 2 / motorConfig()->motorPoleCount;
+                    rpm = calcEscRpm(i, getFreqSensorRPM(i));
                     rpmDataAvailable = true;
                 }
             }
@@ -1110,7 +1105,7 @@ static bool mspProcessOutCommand(uint8_t cmdMSP, sbuf_t *dst)
             if (featureIsEnabled(FEATURE_ESC_SENSOR)) {
                 escSensorData_t *escData = getEscSensorData(i);
                 if (!rpmDataAvailable) {  // We want DSHOT telemetry RPM data (if available) to have precedence
-                    rpm = calcEscRpm(escData->rpm);
+                    rpm = calcEscRpm(i,escData->rpm);
                     rpmDataAvailable = true;
                 }
                 escTemperature = escData->temperature;
@@ -1261,7 +1256,7 @@ static bool mspProcessOutCommand(uint8_t cmdMSP, sbuf_t *dst)
 
         // API 1.42
         sbufWriteU8(dst, getMotorCount());
-        sbufWriteU8(dst, motorConfig()->motorPoleCount);
+        sbufWriteU8(dst, motorConfig()->motorPoleCount[0]); // HF3D: TODO other motors
 #ifdef USE_DSHOT_TELEMETRY
         sbufWriteU8(dst, motorConfig()->dev.useDshotTelemetry);
 #else
@@ -1659,8 +1654,9 @@ static bool mspProcessOutCommand(uint8_t cmdMSP, sbuf_t *dst)
 #endif
 
 #if defined(USE_RPM_FILTER)
-        sbufWriteU8(dst, rpmFilterConfig()->gyro_rpm_notch_harmonics);
-        sbufWriteU8(dst, rpmFilterConfig()->gyro_rpm_notch_min);
+        // HF3D: TODO with Configurator
+        sbufWriteU8(dst, 0);
+        sbufWriteU8(dst, 0);
 #else
         sbufWriteU8(dst, 0);
         sbufWriteU8(dst, 0);
@@ -2140,7 +2136,7 @@ static mspResult_e mspProcessInCommand(mspDescriptor_t srcDesc, uint8_t cmdMSP, 
 
         // version 1.42
         if (sbufBytesRemaining(src) >= 2) {
-            motorConfigMutable()->motorPoleCount = sbufReadU8(src);
+            motorConfigMutable()->motorPoleCount[0] = sbufReadU8(src); // HF3D: TODO other motors
 #if defined(USE_DSHOT_TELEMETRY)
             motorConfigMutable()->dev.useDshotTelemetry = sbufReadU8(src);
 #else
@@ -2393,8 +2389,9 @@ static mspResult_e mspProcessInCommand(mspDescriptor_t srcDesc, uint8_t cmdMSP, 
 #endif
 
 #if defined(USE_RPM_FILTER)
-            rpmFilterConfigMutable()->gyro_rpm_notch_harmonics = sbufReadU8(src);
-            rpmFilterConfigMutable()->gyro_rpm_notch_min = sbufReadU8(src);
+            // HF3D: TODO with Configurator
+            sbufReadU8(src);
+            sbufReadU8(src);
 #else
             sbufReadU8(src);
             sbufReadU8(src);

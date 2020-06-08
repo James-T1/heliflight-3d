@@ -57,6 +57,7 @@
 #include "drivers/osd_symbols.h"
 #include "drivers/sdcard.h"
 #include "drivers/time.h"
+#include "drivers/freq.h"
 
 #include "fc/rc_controls.h"
 #include "fc/rc_modes.h"
@@ -516,7 +517,7 @@ static void osdUpdateStats(void)
         if (stats.max_esc_temp < value) {
             stats.max_esc_temp = value;
         }
-        value = calcEscRpm(osdEscDataCombined->rpm);
+        value = calcEscRpm(0, osdEscDataCombined->rpm); // HF3D: Combined RPM does not make sense
         if (stats.max_esc_rpm < value) {
             stats.max_esc_rpm = value;
         }

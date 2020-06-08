@@ -696,6 +696,12 @@ void init(void)
     // so we are ready to call validateAndFixGyroConfig(), pidInit(), and setAccelerationFilter()
     validateAndFixGyroConfig();
     pidInit(currentPidProfile);
+
+#ifdef USE_RPM_FILTER
+    if (featureIsEnabled(FEATURE_RPM_FILTER)) {
+        rpmFilterInit(rpmFilterConfig());
+    }
+#endif
 #ifdef USE_ACC
     accInitFilters();
 #endif
@@ -784,6 +790,8 @@ void init(void)
         freqInit(freqConfig());
     }
 #endif
+
+    rpmSourceInit();
 
 #ifdef USE_USB_DETECT
     usbCableDetectInit();
