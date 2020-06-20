@@ -1603,7 +1603,12 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
 			if (fabsf(pidData[axis].Sum) >= pidProfile->pidSumLimit) {
 				Ki = 0;
 			}
-		}
+		} else {
+            // Yaw axis
+            if ((pidData[axis].Sum >= mixerGetYawPidsumAssistLimit()) || (pidData[axis].Sum <= -pidProfile->pidSumLimitYaw)) {
+                Ki = 0;
+            }
+        }
         // dynCi = dT if airmode disabled and iterm_windup = 100
         pidData[axis].I = constrainf(previousIterm + Ki * itermErrorRate * dynCi, -itermLimit, itermLimit);
         

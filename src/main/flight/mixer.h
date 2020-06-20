@@ -89,6 +89,7 @@ typedef struct mixerConfig_s {
     uint16_t gov_collective_ff_gain;
     uint16_t gov_collective_ff_impulse_gain;
     uint16_t spoolup_time;
+    uint16_t gov_tailmotor_assist_gain;
 } mixerConfig_t;
 
 PG_DECLARE(mixerConfig_t, mixerConfig);
@@ -129,3 +130,4 @@ extern float headspeed;
 uint8_t isHeliSpooledUp(void);
 float mixerGetGovGearRatio(void);
 float mixerGetGovCollectivePulseFilterGain(void);
+uint16_t mixerGetYawPidsumAssistLimit(void);

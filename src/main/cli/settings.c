@@ -854,6 +854,7 @@ const clivalue_t valueTable[] = {
     { "gov_collective_ff_gain",     VAR_UINT16 |  MASTER_VALUE,  .config.minmaxUnsigned = { 0, 500 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, gov_collective_ff_gain) },
     { "gov_collective_ff_impulse_gain",  VAR_UINT16 |  MASTER_VALUE, .config.minmaxUnsigned = { 0, 500 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, gov_collective_ff_impulse_gain) },
     { "spoolup_time",               VAR_UINT8 |  MASTER_VALUE,  .config.minmaxUnsigned = { 0, 15 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, spoolup_time) },
+    { "gov_tailmotor_assist_gain",  VAR_UINT16 |  MASTER_VALUE, .config.minmaxUnsigned = { 0, 300 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, gov_tailmotor_assist_gain) },
 
 // PG_MOTOR_3D_CONFIG
     { "3d_deadband_low",            VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { PWM_PULSE_MIN, PWM_RANGE_MIDDLE }, PG_MOTOR_3D_CONFIG, offsetof(flight3DConfig_t, deadband3d_low) },
