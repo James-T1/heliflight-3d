@@ -246,7 +246,19 @@ void freqICConfig(const timerHardware_t *timer, bool rising, uint16_t filter)
     HAL_TIM_IC_Start_IT(handle, timer->channel);
 }
 #else
-// TODO
+void freqICConfig(const timerHardware_t *timer, bool rising, uint16_t filter)
+{
+    TIM_ICInitTypeDef sInitStructure;
+
+    TIM_ICStructInit(&sInitStructure);
+    sInitStructure.TIM_Channel = timer->channel;
+    sInitStructure.TIM_ICPolarity = rising ? TIM_ICPolarity_Rising : TIM_ICPolarity_Falling;
+    sInitStructure.TIM_ICSelection = TIM_ICSelection_DirectTI;
+    sInitStructure.TIM_ICPrescaler = TIM_ICPSC_DIV1;
+    sInitStructure.TIM_ICFilter = filter;
+
+    TIM_ICInit(timer->tim, &sInitStructure);
+}
 #endif
 
 void freqInit(const freqConfig_t *freqConfig)
