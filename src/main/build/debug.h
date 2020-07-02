@@ -112,6 +112,7 @@ typedef enum {
     DEBUG_FF_LIMIT,
     DEBUG_FF_INTERPOLATED,
     DEBUG_BLACKBOX_OUTPUT,
+    DEBUG_FREQ_SENSOR,
     DEBUG_COUNT
 } debugType_e;
 

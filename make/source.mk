@@ -46,6 +46,7 @@ COMMON_SRC = \
             drivers/system.c \
             drivers/timer_common.c \
             drivers/timer.c \
+            drivers/freq.c \
             fc/board_info.c \
             fc/dispatch.c \
             fc/hardfaults.c \
@@ -223,14 +224,6 @@ SPEED_OPTIMISED_SRC := $(SPEED_OPTIMISED_SRC) \
             drivers/timer.c \
             fc/core.c \
             fc/tasks.c \
-            fc/rc.c \
-            fc/rc_controls.c \
-            fc/runtime_config.c \
-            flight/gyroanalyse.c \
-            flight/imu.c \
-            flight/mixer.c \
-            flight/pid.c \
-            flight/rpm_filter.c \
             rx/ibus.c \
             rx/rx.c \
             rx/rx_spi.c \

@@ -87,6 +87,7 @@
 #include "pg/sdio.h"
 #include "pg/stats.h"
 #include "pg/board.h"
+#include "pg/freq.h"
 
 #include "rx/rx.h"
 #include "rx/cc2500_frsky_common.h"
@@ -845,15 +846,15 @@ const clivalue_t valueTable[] = {
     { "crashflip_motor_percent",    VAR_UINT8 |  MASTER_VALUE,  .config.minmaxUnsigned = { 0, 100 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, crashflip_motor_percent) },
     // HF3D:  Governor settings
     { "gov_max_headspeed",          VAR_UINT16 |  MASTER_VALUE,  .config.minmaxUnsigned = { 0, 10000 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, gov_max_headspeed) },
-    { "gov_gear_ratio",             VAR_UINT16 |  MASTER_VALUE,  .config.minmaxUnsigned = { 100, 3000 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, gov_gear_ratio) },
+    { "gov_gear_ratio",             VAR_UINT16 |  MASTER_VALUE,  .config.minmaxUnsigned = { 1000, 30000 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, gov_gear_ratio) },
     // HF3D TODO:  Move these governor settings to profiles eventually
     { "gov_p_gain",                 VAR_UINT16 |  MASTER_VALUE,  .config.minmaxUnsigned = { 0, 500 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, gov_p_gain) },
     { "gov_i_gain",                 VAR_UINT16 |  MASTER_VALUE,  .config.minmaxUnsigned = { 0, 500 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, gov_i_gain) },
     { "gov_cyclic_ff_gain",         VAR_UINT16 |  MASTER_VALUE,  .config.minmaxUnsigned = { 0, 500 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, gov_cyclic_ff_gain) },
     { "gov_collective_ff_gain",     VAR_UINT16 |  MASTER_VALUE,  .config.minmaxUnsigned = { 0, 500 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, gov_collective_ff_gain) },
     { "gov_collective_ff_impulse_gain",  VAR_UINT16 |  MASTER_VALUE, .config.minmaxUnsigned = { 0, 500 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, gov_collective_ff_impulse_gain) },
-    { "gov_collective_ff_impulse_freq",  VAR_UINT16 |  MASTER_VALUE, .config.minmaxUnsigned = { 0, 1000 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, gov_collective_ff_impulse_freq) },
-    { "spoolup_time",               VAR_UINT8 |  MASTER_VALUE,  .config.minmaxUnsigned = { 1, 15 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, spoolup_time) },
+    { "spoolup_time",               VAR_UINT8 |  MASTER_VALUE,  .config.minmaxUnsigned = { 0, 15 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, spoolup_time) },
+    { "gov_tailmotor_assist_gain",  VAR_UINT16 |  MASTER_VALUE, .config.minmaxUnsigned = { 0, 300 }, PG_MIXER_CONFIG, offsetof(mixerConfig_t, gov_tailmotor_assist_gain) },
 
 // PG_MOTOR_3D_CONFIG
     { "3d_deadband_low",            VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { PWM_PULSE_MIN, PWM_RANGE_MIDDLE }, PG_MOTOR_3D_CONFIG, offsetof(flight3DConfig_t, deadband3d_low) },
@@ -1098,8 +1099,14 @@ const clivalue_t valueTable[] = {
     { "yaw_cyclic_ff_gain",             VAR_UINT16 | PROFILE_VALUE, .config.minmaxUnsigned = { 0, 1000 },PG_PID_PROFILE, offsetof(pidProfile_t, yawCycKf) },
     { "yaw_base_thrust",                VAR_UINT16 | PROFILE_VALUE, .config.minmaxUnsigned = { 0, 3000 },PG_PID_PROFILE, offsetof(pidProfile_t, yawBaseThrust) },
     { "rescue_collective",              VAR_UINT16 | PROFILE_VALUE, .config.minmaxUnsigned = { 50, 500 },PG_PID_PROFILE, offsetof(pidProfile_t, rescue_collective) },
-    { "error_decay_always",             VAR_UINT8  | MASTER_VALUE | MODE_LOOKUP, .config.lookup = { TABLE_OFF_ON }, PG_PID_PROFILE, offsetof(pidProfile_t, error_decay_always) },
+    { "error_decay_always",             VAR_UINT8  | PROFILE_VALUE | MODE_LOOKUP, .config.lookup = { TABLE_OFF_ON }, PG_PID_PROFILE, offsetof(pidProfile_t, error_decay_always) },
     { "error_decay_rate",               VAR_UINT8  | PROFILE_VALUE, .config.minmaxUnsigned = { 0, 45 },PG_PID_PROFILE, offsetof(pidProfile_t, error_decay_rate) },
+    { "collective_ff_impulse_freq",     VAR_UINT16 | PROFILE_VALUE, .config.minmaxUnsigned = { 0, 1000 }, PG_PID_PROFILE, offsetof(pidProfile_t, collective_ff_impulse_freq) },
+    { "elevator_filter_gain",           VAR_UINT16 | PROFILE_VALUE, .config.minmaxUnsigned = { 0, 1000 }, PG_PID_PROFILE, offsetof(pidProfile_t, elevator_filter_gain) },
+    { "elevator_filter_window_time",    VAR_UINT8  | PROFILE_VALUE, .config.minmaxUnsigned = { 0, 255 },PG_PID_PROFILE, offsetof(pidProfile_t, elevator_filter_window_time) },
+    { "elevator_filter_window_size",    VAR_UINT8  | PROFILE_VALUE, .config.minmaxUnsigned = { 0, 100 },PG_PID_PROFILE, offsetof(pidProfile_t, elevator_filter_window_size) },
+    { "elevator_filter_hz",             VAR_UINT8  | PROFILE_VALUE, .config.minmaxUnsigned = { 0, 100 },PG_PID_PROFILE, offsetof(pidProfile_t, elevator_filter_hz) },
+    
     
 // PG_TELEMETRY_CONFIG
 #ifdef USE_TELEMETRY
@@ -1420,6 +1427,9 @@ const clivalue_t valueTable[] = {
     { "esc_sensor_halfduplex",          VAR_UINT8   | MASTER_VALUE | MODE_LOOKUP, .config.lookup = { TABLE_OFF_ON }, PG_ESC_SENSOR_CONFIG, offsetof(escSensorConfig_t, halfDuplex) },
     { "esc_sensor_current_offset",      VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 16000 }, PG_ESC_SENSOR_CONFIG, offsetof(escSensorConfig_t, offset) },
     { "esc_sensor_protocol",            VAR_UINT8   | MASTER_VALUE | MODE_LOOKUP, .config.lookup = { TABLE_ESC_SENSOR_PROTOCOL }, PG_ESC_SENSOR_CONFIG, offsetof(escSensorConfig_t, escSensorProtocol) },
+    { "esc_sensor_hobbywing_curroffset",    VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 1000 }, PG_ESC_SENSOR_CONFIG, offsetof(escSensorConfig_t, esc_sensor_hobbywing_curroffset) },
+    { "esc_sensor_hobbywing_voltagedivisor", VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 254 }, PG_ESC_SENSOR_CONFIG, offsetof(escSensorConfig_t, esc_sensor_hobbywing_voltagedivisor) },
+    { "esc_sensor_hobbywing_currscale", VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 254 }, PG_ESC_SENSOR_CONFIG, offsetof(escSensorConfig_t, esc_sensor_hobbywing_currscale) },
 #endif
 
 #ifdef USE_RX_FRSKY_SPI
@@ -1510,14 +1520,14 @@ const clivalue_t valueTable[] = {
 #endif
 
 #ifdef USE_RPM_FILTER
-    { "gyro_rpm_notch_harmonics",  VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 2 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, gyro_rpm_notch_harmonics) },
+    { "gyro_rpm_notch_harmonics",  VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 10 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, gyro_rpm_notch_harmonics) },
     { "gyro_rpm_notch_q",  VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 1, 3000 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, gyro_rpm_notch_q) },
-    { "gyro_rpm_notch_min",  VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 25, 200 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, gyro_rpm_notch_min) },
-    { "dterm_rpm_notch_harmonics",  VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 2 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, dterm_rpm_notch_harmonics) },
+    { "gyro_rpm_notch_min",  VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 20, 200 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, gyro_rpm_notch_min) },
+    { "dterm_rpm_notch_harmonics",  VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 10 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, dterm_rpm_notch_harmonics) },
     { "dterm_rpm_notch_q",  VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 1, 3000 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, dterm_rpm_notch_q) },
-    { "dterm_rpm_notch_min",  VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 50, 200 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, dterm_rpm_notch_min) },
+    { "dterm_rpm_notch_min",  VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 40, 200 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, dterm_rpm_notch_min) },
     { "rpm_notch_lpf",  VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 5, 500 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, rpm_lpf) },
-    { "rpm_tail_gear_ratio",  VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 1000 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, rpm_tail_gear_ratio) },
+    { "rpm_tail_gear_ratio",  VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 10000 }, PG_RPM_FILTER_CONFIG, offsetof(rpmFilterConfig_t, rpm_tail_gear_ratio) },
 #endif
 
 #ifdef USE_RX_FLYSKY

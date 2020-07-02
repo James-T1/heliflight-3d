@@ -1,0 +1,14 @@
+#!/bin/bash
+
+set -e
+
+export TARGET=STM32F7X2
+make clean
+make
+
+export TARGET=KAKUTEF7MINI
+make clean
+make
+
+cp -v obj/*.hex /nfs/Dropbox/Betaflight/Firmware/
+
