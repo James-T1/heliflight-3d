@@ -783,9 +783,9 @@ FAST_CODE_NOINLINE void updateRcCommands(void)
     rcCommand[COLLECTIVE] = tmp;
     
 #if defined(USE_ACC)
-    // HF3D:  Rescue (angle) mode overrides user's collective pitch rcCommand
-    // Check if rescue (angle) mode is active
-    if (FLIGHT_MODE(ANGLE_MODE)) {    // || FLIGHT_MODE(GPS_RESCUE_MODE)
+    // HF3D:  Rescue (angle) mode and autoflip mode override the user's collective pitch rcCommand
+    // Check if rescue (angle) mode or autoflip mode (airmode) is active
+    if (FLIGHT_MODE(ANGLE_MODE)) {    // || pidGetAutoflipInProgress()  //  || FLIGHT_MODE(GPS_RESCUE_MODE)
         // attitude.values.roll/pitch = 0 when level, 1800 when fully inverted (decidegrees)
         // Pitch is +90 / -90 at straight down and straight up.  Invert the absolute value of that so 0 = straight up/down
         const float pitchCurrentInclination = 90.0f - (ABS(attitude.values.pitch) / 10.0f);
@@ -800,24 +800,51 @@ FAST_CODE_NOINLINE void updateRcCommands(void)
 
         // adjust collective pitch so heli has no collective while past vertical, and pitch is added as it approaches level
         // vertCurrentInclination between 0 (vertical) and 90 (level)  -- inverted from normal attitude values
-        // Hover pitch on my M2 test rig is around +100, full pitch pumps are around +240
-        // Desired collective at various rescue pitches:
-        //   90deg = 0 collective, 60deg=25col, 45deg=60col, 30deg=110col, 10deg=190col, 0deg=240col
-        //   ... output of this equation is 240, so normalize it and then multiply by rescue_collective setting.
+        // Desired rescue collective at various vertical inclination angles:
+        //   0deg(knife-edge)=0%, 30deg=11%, 45deg=25%, 60deg=45%, 80deg=79%, 90deg(level)=100%
+        const float collectiveInclinationFactor = 0.000123456789f * vertCurrentInclination * vertCurrentInclination;
+        
         // HF3D TODO:  Add rescue collective agression parameter to reduce tail blowout from large collective swings
         //   Or just rate limit the collective change?  Basically it's the big load and governor change that can overwhelm
         //   the tail authority of the heli.
         // HF3D TODO:  acc angleTrim setting isn't taken into account here... but is in pidLevel.
         //   Same issue up above.  It's minor as long as angleTrim is small, so maybe not worth the calculation overhead?
         if ( ((attitude.values.roll / 10.0f) > 90.0f) || ((attitude.values.roll / 10.0f) < -90.0f) ) {
-            // We're closer to inverted and pidLevel will be rolling to inverted.
-            // Use negative collective pitch.
-            rcCommand[COLLECTIVE] = pidGetRescueCollectiveSetting() * (-0.02963f * vertCurrentInclination * vertCurrentInclination) / 240.0f;
+            // We're closer to inverted.  Use negative collective pitch.
+            if (FLIGHT_MODE(ANGLE_MODE)) {
+                // pidLevel will be rolling to inverted.
+                rcCommand[COLLECTIVE] = pidGetRescueCollectiveSetting() * -collectiveInclinationFactor;
+            } else if (pidGetAutoflipInProgress()) {
+                // Scale the user's collective command during autoflips so the flip remains centered on the x/y axis
+                //rcCommand[COLLECTIVE] *= -1.6 * collectiveInclinationFactor;
+                rcCommand[COLLECTIVE] *= -1.45f * sin_approx(vertCurrentInclination * (M_PIf / 180.0f));
+            }
         } else {
-            // We're closer to upright and pidLevel will be rolling to upright.
-            // Use positive collective pitch.
-            rcCommand[COLLECTIVE] = pidGetRescueCollectiveSetting() * (0.02963f * vertCurrentInclination * vertCurrentInclination) / 240.0f;
+            // We're closer to upright.  Use positive collective pitch.
+            if (FLIGHT_MODE(ANGLE_MODE)) {
+                // pidLevel will be rolling to upright.
+                rcCommand[COLLECTIVE] = pidGetRescueCollectiveSetting() * collectiveInclinationFactor;
+            } else if (pidGetAutoflipInProgress()) {
+                // Scale the user's collective command during autoflips so it remains centered on the x/y axis
+                //rcCommand[COLLECTIVE] *= 1.6 * collectiveInclinationFactor;
+                rcCommand[COLLECTIVE] *= 1.45f * sin_approx(vertCurrentInclination * (M_PIf / 180.0f));
+            }  
         }
+    } else if (pidGetAutoflipInProgress()) {
+        
+        const timeDelta_t elapsedFlipTime = micros() - pidGetAutoflipEngagedTime();
+        
+        if (elapsedFlipTime < 0) {
+            // Create a collective pitch pump at the beginning of the flip
+            rcCommand[COLLECTIVE] += rcCommand[COLLECTIVE] * 0.60f * constrainf((250000+elapsedFlipTime)/250000.0f,0.0f,1.0f);
+        } else {
+            // We're in the middle of the flip
+            // Determine our orientation using 1 flip time = 360 degrees of rotation
+            // Use that to drive the collective in open loop based on our assumed rotational position
+            rcCommand[COLLECTIVE] *= 1.60f * cos_approx(2.0f * M_PIf * elapsedFlipTime / pidGetAutoflipFlipTime());
+        }
+        
+        // Note:  Collective will immediately drop back down to the stick position when the autoflip is finished.
     }
 #endif
     

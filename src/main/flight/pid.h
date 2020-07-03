@@ -196,6 +196,9 @@ typedef struct pidProfile_s {
     uint8_t elevator_filter_window_size;    // Size of the de-bounce window around center stick (0 deg/s) in degrees/second
     uint8_t elevator_filter_hz;             // Low-pass filter cutoff frequency that is applied to our elevator setpoint.  Lower Hz = more delay on stop.
 
+    uint16_t autoflip_yaw_rate;             // Yaw rotation rate in deg/s for auto-piroflip mode  (Must be >180deg/s and less than helicopter max yaw rate)
+    uint16_t autoflip_flip_rate;            // Flip rotation rate in deg/s for auto-piroflip mode (Must be >90deg/s and less than helicopter max yaw rate)
+
 } pidProfile_t;
 
 PG_DECLARE_ARRAY(pidProfile_t, PID_PROFILE_COUNT, pidProfiles);
@@ -279,3 +282,6 @@ float pidGetCollectiveStickPercent();
 float pidGetCollectiveStickHPF();
 uint16_t pidGetRescueCollectiveSetting();
 float pidGetCollectivePulseFilterGain();
+bool pidGetAutoflipInProgress();
+timeUs_t pidGetAutoflipFlipTime();
+timeUs_t pidGetAutoflipEngagedTime();

@@ -43,6 +43,7 @@
 #include "fc/core.h"
 #include "fc/rc.h"
 #include "fc/rc_controls.h"
+#include "fc/rc_modes.h"
 #include "fc/runtime_config.h"
 
 #include "flight/gps_rescue.h"
@@ -75,6 +76,10 @@ int16_t delayArrayPitch[DELAYLENGTH] = {0};
 FAST_RAM_ZERO_INIT float delayCompSum[3] = {0.0f};
 FAST_RAM_ZERO_INIT float delayCompAlpha = 0.0f; */
 // End inits for PID Delay Compensation
+
+static bool autoflipInProgress = false;
+static timeUs_t autoflipEngagedTime = 0;
+static timeUs_t autoflipFlipTime;
 
 const char pidNames[] =
     "ROLL;"
@@ -237,6 +242,8 @@ void resetPidProfile(pidProfile_t *pidProfile)
         .elevator_filter_window_time = 75,
         .elevator_filter_window_size = 30,
         .elevator_filter_hz = 15,
+        .autoflip_yaw_rate = 0,
+        .autoflip_flip_rate = 0,
     );
 #ifndef USE_D_MIN
     pidProfile->pid[PID_ROLL].D = 30;
@@ -891,6 +898,8 @@ STATIC_UNIT_TESTED float pidLevel(int axis, const pidProfile_t *pidProfile, cons
 
     if (FLIGHT_MODE(ANGLE_MODE)) {
         // Angle mode is now rescue mode.
+        autoflipInProgress = false;
+        autoflipEngagedTime = 0;
         float errorAngle = 0.0f;
 
         // -90 Pitch is straight up and +90 is straight down
@@ -930,6 +939,91 @@ STATIC_UNIT_TESTED float pidLevel(int axis, const pidProfile_t *pidProfile, cons
         currentPidSetpoint = errorAngle * levelGain;   
         return currentPidSetpoint;
 
+    } else if (airmodeIsEnabled() || autoflipInProgress) {
+        // Auto-piroflip mode uses Airmode switch toggle to activate
+        // Rescue (angle) mode has priority over autoflip (airmode), but autoflip has priority over horizon & gps rescue modes
+        // NOTE:  Remember that this gets called for EACH axis on each PID iteration.
+        
+        //static timeUs_t autoflipFlipTime = 0;
+        static timeUs_t autoflipYawTime = 0;
+        //static int autoflipYawRotationsRemaining = 0;
+        
+        if (!autoflipInProgress) {
+            // Check to ensure we've been engaged for at least 1.0 seconds before starting an autoflip
+            if (autoflipEngagedTime <= 0) {
+                // We weren't engaged... before now, so start our counter
+                autoflipEngagedTime = micros();
+            } else if ((micros() - autoflipEngagedTime) > 500000) {
+                // Been engaged for > 0.5 seconds, wait for upright level and no cyclic stick inputs.
+                if (isUpright() && MAX(fabsf(rcCommand[ROLL]), fabsf(rcCommand[PITCH])) < 15) {
+                    // For now we will only support at least 90deg/s yaw rate and 90deg/s flip rate.
+                    if (pidProfile->autoflip_yaw_rate >= 90 && pidProfile->autoflip_flip_rate >= 90) {
+                        autoflipInProgress = true;
+                        // Reset our engaged time for the start of the flip
+                        autoflipEngagedTime = micros() + 250000;
+                        autoflipYawTime = (1000000 * 360) / pidProfile->autoflip_yaw_rate;
+                        autoflipFlipTime = (1000000 * 360) / pidProfile->autoflip_flip_rate;
+                        // Set us up so we always return to the same tail orientation that we started in?
+                        //autoflipYawRotationsRemaining = MIN(autoflip_yaw_rate / autoflip_flip_rate, 1);
+                        // Begin the flip on whichever axis we're on at the start
+                        if (axis == FD_PITCH) {
+                            currentPidSetpoint = pidProfile->autoflip_flip_rate;
+                        } else if (axis == FD_ROLL) {
+                            currentPidSetpoint = 0;
+                        } else if (axis == FD_YAW) {
+                            currentPidSetpoint = pidProfile->autoflip_yaw_rate;
+                        }
+                    }
+                }
+            }
+        } else {
+            // Auto-flip is in progress
+            // Engage Rescue (angle) mode if you want to bail out of an autoflip while it's still in progress.
+            
+            const timeDelta_t elapsedFlipTime = micros() - autoflipEngagedTime;
+            if (elapsedFlipTime < 0) {
+                // Wait for collective pump at beginning of flip
+                return currentPidSetpoint;
+            }
+                
+            // If we allow for non-piroflips in the future then this needs to be checked for autoflipYawTime == 0
+            const float stirRadians = (M_PIf / 180.0f) * pidProfile->autoflip_yaw_rate * (elapsedFlipTime % autoflipYawTime) / 1000000;
+
+            // Calculate the axis rate setpoints during the piroflip
+            // The elapsedFlipTime checks are unnecessary, but keep them in case we decided to always rotate the tail back to the original orientation after the flip is completed.
+            if (axis == FD_PITCH && elapsedFlipTime <= autoflipFlipTime) {
+                // Start flip on the pitch axis (cosine).  Positive elevator is pitch forward.
+                currentPidSetpoint = pidProfile->autoflip_flip_rate * cos_approx(stirRadians);
+            } else if (axis == FD_ROLL && elapsedFlipTime <= autoflipFlipTime) {
+                // Continue flip on the roll axis (sine).  Positive aileron is roll right.
+                currentPidSetpoint = pidProfile->autoflip_flip_rate * sin_approx(stirRadians);
+            } else if (axis == FD_YAW) {
+                // Always rotate at our yaw_rate setting
+                // For now we're only going to rotate nose left (negative rcCommand/positive setpoint)
+                currentPidSetpoint = pidProfile->autoflip_yaw_rate;
+            }
+        
+            // Check to see if we've completed a full flip.
+            // Only do one flip for now.
+            if (elapsedFlipTime >= autoflipFlipTime) {
+                // If we reach the end of the flip and the autoflip mode is no longer active, then stop the flip.
+                autoflipInProgress = false;
+                autoflipEngagedTime = 0;
+            }
+            
+/*            if (!airmodeIsEnabled() && elapsedFlipTime >= autoflipFlipTime) {
+                // If we reach the end of the flip and the autoflip mode is no longer active, then stop the flip.
+                autoflipInProgress = false;
+                autoflipEngagedTime = 0;
+            } else if (elapsedFlipTime >= autoflipFlipTime) {
+                // If we reach the end of our flip and autoflip mode is still active, then reset our timer so that we continue our flip
+                autoflipEngagedTime = micros();
+            }
+*/
+        }
+        
+        return currentPidSetpoint;
+    
     } else {
         // Horizon and GPS Rescue modes
         // calculate error angle and limit the angle to the max inclination
@@ -1528,6 +1622,9 @@ void FAST_CODE pidController(const pidProfile_t *pidProfile, timeUs_t currentTim
         } else if (FLIGHT_MODE(ANGLE_MODE) && (axis == FD_YAW)) {
             // HF3D:  Don't allow user to give yaw input while rescue (angle) mode corrections are occuring
             currentPidSetpoint = 0.0f;
+        } else if (airmodeIsEnabled() || autoflipInProgress) {
+            // HF3D:  Autoflip mode call to pidlevel
+            currentPidSetpoint = pidLevel(axis, pidProfile, angleTrim, currentPidSetpoint);
         }
 #endif
 
@@ -1982,4 +2079,19 @@ uint16_t pidGetRescueCollectiveSetting()
 float pidGetCollectivePulseFilterGain(void)
 {
     return collectivePulseFilterGain;
+}
+
+bool pidGetAutoflipInProgress(void)
+{
+    return autoflipInProgress;
+}
+
+timeUs_t pidGetAutoflipFlipTime(void)
+{
+    return autoflipFlipTime;
+}
+
+timeUs_t pidGetAutoflipEngagedTime(void)
+{
+    return autoflipEngagedTime;
 }

@@ -1106,7 +1106,8 @@ const clivalue_t valueTable[] = {
     { "elevator_filter_window_time",    VAR_UINT8  | PROFILE_VALUE, .config.minmaxUnsigned = { 0, 255 },PG_PID_PROFILE, offsetof(pidProfile_t, elevator_filter_window_time) },
     { "elevator_filter_window_size",    VAR_UINT8  | PROFILE_VALUE, .config.minmaxUnsigned = { 0, 100 },PG_PID_PROFILE, offsetof(pidProfile_t, elevator_filter_window_size) },
     { "elevator_filter_hz",             VAR_UINT8  | PROFILE_VALUE, .config.minmaxUnsigned = { 0, 100 },PG_PID_PROFILE, offsetof(pidProfile_t, elevator_filter_hz) },
-    
+    { "autoflip_yaw_rate",              VAR_UINT16 | PROFILE_VALUE, .config.minmaxUnsigned = { 0, 720 }, PG_PID_PROFILE, offsetof(pidProfile_t, autoflip_yaw_rate) },
+    { "autoflip_flip_rate",             VAR_UINT16 | PROFILE_VALUE, .config.minmaxUnsigned = { 0, 360 }, PG_PID_PROFILE, offsetof(pidProfile_t, autoflip_flip_rate) },        
     
 // PG_TELEMETRY_CONFIG
 #ifdef USE_TELEMETRY
