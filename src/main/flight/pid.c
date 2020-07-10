@@ -79,7 +79,8 @@ FAST_RAM_ZERO_INIT float delayCompAlpha = 0.0f; */
 
 static bool autoflipInProgress = false;
 static timeUs_t autoflipEngagedTime = 0;
-static timeUs_t autoflipFlipTime;
+static timeDelta_t autoflipFlipTime;
+static float autoflipCollectiveMultiplier = 0.0f;
 
 const char pidNames[] =
     "ROLL;"
@@ -244,6 +245,7 @@ void resetPidProfile(pidProfile_t *pidProfile)
         .elevator_filter_hz = 15,
         .autoflip_yaw_rate = 0,
         .autoflip_flip_rate = 0,
+        .autoflip_collective_multiplier = 100,
     );
 #ifndef USE_D_MIN
     pidProfile->pid[PID_ROLL].D = 30;
@@ -790,6 +792,7 @@ void pidInitConfig(const pidProfile_t *pidProfile)
 
     // HF3D
     rescueCollective = pidProfile->rescue_collective;
+    autoflipCollectiveMultiplier = pidProfile->autoflip_collective_multiplier / 100.0f;
 }
 
 void pidInit(const pidProfile_t *pidProfile)
@@ -944,8 +947,8 @@ STATIC_UNIT_TESTED float pidLevel(int axis, const pidProfile_t *pidProfile, cons
         // Rescue (angle) mode has priority over autoflip (airmode), but autoflip has priority over horizon & gps rescue modes
         // NOTE:  Remember that this gets called for EACH axis on each PID iteration.
         
-        //static timeUs_t autoflipFlipTime = 0;
-        static timeUs_t autoflipYawTime = 0;
+        //static timeDelta_t autoflipFlipTime = 0;
+        static timeDelta_t autoflipYawTime = 0;
         //static int autoflipYawRotationsRemaining = 0;
         
         if (!autoflipInProgress) {
@@ -1003,15 +1006,8 @@ STATIC_UNIT_TESTED float pidLevel(int axis, const pidProfile_t *pidProfile, cons
                 currentPidSetpoint = pidProfile->autoflip_yaw_rate;
             }
         
-            // Check to see if we've completed a full flip.
-            // Only do one flip for now.
-            if (elapsedFlipTime >= autoflipFlipTime) {
-                // If we reach the end of the flip and the autoflip mode is no longer active, then stop the flip.
-                autoflipInProgress = false;
-                autoflipEngagedTime = 0;
-            }
-            
-/*            if (!airmodeIsEnabled() && elapsedFlipTime >= autoflipFlipTime) {
+            // Check to see if we've completed our flip and decide what to do.
+            if (!airmodeIsEnabled() && elapsedFlipTime >= autoflipFlipTime) {
                 // If we reach the end of the flip and the autoflip mode is no longer active, then stop the flip.
                 autoflipInProgress = false;
                 autoflipEngagedTime = 0;
@@ -1019,7 +1015,6 @@ STATIC_UNIT_TESTED float pidLevel(int axis, const pidProfile_t *pidProfile, cons
                 // If we reach the end of our flip and autoflip mode is still active, then reset our timer so that we continue our flip
                 autoflipEngagedTime = micros();
             }
-*/
         }
         
         return currentPidSetpoint;
@@ -2086,7 +2081,7 @@ bool pidGetAutoflipInProgress(void)
     return autoflipInProgress;
 }
 
-timeUs_t pidGetAutoflipFlipTime(void)
+timeDelta_t pidGetAutoflipFlipTime(void)
 {
     return autoflipFlipTime;
 }
@@ -2094,4 +2089,9 @@ timeUs_t pidGetAutoflipFlipTime(void)
 timeUs_t pidGetAutoflipEngagedTime(void)
 {
     return autoflipEngagedTime;
+}
+
+float pidGetAutoflipCollectiveMultiplier(void)
+{
+    return autoflipCollectiveMultiplier;
 }

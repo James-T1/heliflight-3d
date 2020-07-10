@@ -814,21 +814,23 @@ FAST_CODE_NOINLINE void updateRcCommands(void)
             if (FLIGHT_MODE(ANGLE_MODE)) {
                 // pidLevel will be rolling to inverted.
                 rcCommand[COLLECTIVE] = pidGetRescueCollectiveSetting() * -collectiveInclinationFactor;
-            } else if (pidGetAutoflipInProgress()) {
+            } 
+            /*} else if (pidGetAutoflipInProgress()) {
                 // Scale the user's collective command during autoflips so the flip remains centered on the x/y axis
                 //rcCommand[COLLECTIVE] *= -1.6 * collectiveInclinationFactor;
                 rcCommand[COLLECTIVE] *= -1.45f * sin_approx(vertCurrentInclination * (M_PIf / 180.0f));
-            }
+            }*/
         } else {
             // We're closer to upright.  Use positive collective pitch.
             if (FLIGHT_MODE(ANGLE_MODE)) {
                 // pidLevel will be rolling to upright.
                 rcCommand[COLLECTIVE] = pidGetRescueCollectiveSetting() * collectiveInclinationFactor;
-            } else if (pidGetAutoflipInProgress()) {
+            }
+            /*} else if (pidGetAutoflipInProgress()) {
                 // Scale the user's collective command during autoflips so it remains centered on the x/y axis
                 //rcCommand[COLLECTIVE] *= 1.6 * collectiveInclinationFactor;
                 rcCommand[COLLECTIVE] *= 1.45f * sin_approx(vertCurrentInclination * (M_PIf / 180.0f));
-            }  
+            }*/  
         }
     } else if (pidGetAutoflipInProgress()) {
         
@@ -836,12 +838,12 @@ FAST_CODE_NOINLINE void updateRcCommands(void)
         
         if (elapsedFlipTime < 0) {
             // Create a collective pitch pump at the beginning of the flip
-            rcCommand[COLLECTIVE] += rcCommand[COLLECTIVE] * 0.60f * constrainf((250000+elapsedFlipTime)/250000.0f,0.0f,1.0f);
+            rcCommand[COLLECTIVE] += rcCommand[COLLECTIVE] * (pidGetAutoflipCollectiveMultiplier()-1.0f) * constrainf((250000+elapsedFlipTime)/250000.0f,0.0f,1.0f);
         } else {
             // We're in the middle of the flip
             // Determine our orientation using 1 flip time = 360 degrees of rotation
             // Use that to drive the collective in open loop based on our assumed rotational position
-            rcCommand[COLLECTIVE] *= 1.60f * cos_approx(2.0f * M_PIf * elapsedFlipTime / pidGetAutoflipFlipTime());
+            rcCommand[COLLECTIVE] *= pidGetAutoflipCollectiveMultiplier() * cos_approx(2.0f * M_PIf * elapsedFlipTime / pidGetAutoflipFlipTime());
         }
         
         // Note:  Collective will immediately drop back down to the stick position when the autoflip is finished.

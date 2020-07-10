@@ -198,6 +198,7 @@ typedef struct pidProfile_s {
 
     uint16_t autoflip_yaw_rate;             // Yaw rotation rate in deg/s for auto-piroflip mode  (Must be >180deg/s and less than helicopter max yaw rate)
     uint16_t autoflip_flip_rate;            // Flip rotation rate in deg/s for auto-piroflip mode (Must be >90deg/s and less than helicopter max yaw rate)
+    uint8_t autoflip_collective_multiplier; // This value gets multiplied by the collective stick input to give the additional collective needed to complete the piroflip
 
 } pidProfile_t;
 
@@ -283,5 +284,6 @@ float pidGetCollectiveStickHPF();
 uint16_t pidGetRescueCollectiveSetting();
 float pidGetCollectivePulseFilterGain();
 bool pidGetAutoflipInProgress();
-timeUs_t pidGetAutoflipFlipTime();
+timeDelta_t pidGetAutoflipFlipTime();
 timeUs_t pidGetAutoflipEngagedTime();
+float pidGetAutoflipCollectiveMultiplier();
