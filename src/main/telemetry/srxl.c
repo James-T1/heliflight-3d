@@ -195,9 +195,8 @@ uint16_t getMotorAveragePeriod(void)
 
         if (motors > 0) {
             for (int motor = 0; motor < motors; motor++) {
-                rpm += getDshotTelemetry(motor);
+                rpm += calcEscRpm(motor, getDshotTelemetry(motor));
             }
-            rpm = 100.0f / (motorConfig()->motorPoleCount / 2.0f) * rpm;  // convert erpm freq to RPM.
             rpm /= motors;           // Average combined rpm
         }
     }

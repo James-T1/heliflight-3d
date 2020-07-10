@@ -243,7 +243,7 @@ static const char * const featureNames[] = {
     "RANGEFINDER", "TELEMETRY", "", "3D", "RX_PARALLEL_PWM",
     "RX_MSP", "RSSI_ADC", "LED_STRIP", "DISPLAY", "OSD",
     "", "CHANNEL_FORWARDING", "TRANSPONDER", "AIRMODE",
-    "", "", "RX_SPI", "", "ESC_SENSOR", "ANTI_GRAVITY",
+    "", "", "RX_SPI", "RPM_FILTER", "ESC_SENSOR", "ANTI_GRAVITY",
     "DYNAMIC_FILTER", "FREQ_SENSOR", NULL
 };
 
@@ -5586,18 +5586,9 @@ static void cliDshotTelemetryInfo(char *cmdline)
         cliPrintLine("=====   =======   ======   =====");
 #endif
         for (uint8_t i = 0; i < getMotorCount(); i++) {
-            // HF3D TODO:  Make motorPoleCount an array for differnet main/tail pole counts, update CLI/MSP telemetry/LUA/configurator to match
-            if (i == 1) {         // Tail motor
-                cliPrintf("%5d   %7d   %6d   %5d   ", i,
-                      (int)getDshotTelemetry(i) * 100,
-                      (int)getDshotTelemetry(i) * 100 * 2 / 12,
-                      (int)getDshotTelemetry(i) * 100 * 2 / 12 / 60);
-            } else {            // Main/other motor
-                cliPrintf("%5d   %7d   %6d   %5d   ", i,
-                          (int)getDshotTelemetry(i) * 100,
-                          (int)getDshotTelemetry(i) * 100 * 2 / motorConfig()->motorPoleCount,
-                          (int)getDshotTelemetry(i) * 100 * 2 / motorConfig()->motorPoleCount / 60);
-            }
+            int erpm = getDshotTelemetry(i);
+            cliPrintf("%5d   %7d   %6d   %5d   ", i,
+                      100*erpm, calcEscRpm(i,erpm), calcEscRpm(i,erpm) / 60);
 #ifdef USE_DSHOT_TELEMETRY_STATS
             if (isDshotMotorTelemetryActive(i)) {
                 const int calcPercent = getDshotTelemetryMotorInvalidPercent(i);
