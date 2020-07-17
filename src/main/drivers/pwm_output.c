@@ -340,17 +340,19 @@ timerOvrHandlerRec_t updateCb;
 // Note:  Since CCR is 16-bit, we're limited to 65535uS, or 16Hz as our minimum PWM frequency.
 static volatile uint16_t ccrForLastPulse = 0;               // Set this to the CCR used when a new PWM pulse is generated
 static volatile uint16_t firstValidTelemetryTime = 0;       // Reset this to zero each time a PWM pulse is generated
-static volatile bool ccDataValid = false;
-static volatile uint8_t ccTelemIndex = 0;
+static volatile bool ccDataValid = false;                   // Let's us flag if a telemetry data set had any invalid timing pulses
+static volatile uint8_t ccTelemIndex = 0;                   // Keeps track of which telemetry value we are expecting next from the ESC
 static volatile uint16_t rawTelemetryTimes[11];             // Store the raw telemetry times (may include invalid data: check ccDataValid flag)
 const uint16_t ccMaxPulseLengths[11] = { 1000, 5500, 5500, 5500, 3000, 4500, 5500, 5500, 5500, 5500, 4500 };
-volatile uint16_t ccTelemetryTimes[12];              // Last array value is the validity field (0=invalid, 1=valid)
+volatile uint16_t ccTelemetryTimes[12];                     // Last array value is the validity field (0=invalid, 1=valid)
 
+// Process any falling edge on the castle ESC signal wire
+//   First falling edge will be start of PWM output from FC, second pulse should be telemetry data from the ESC
 static void castleFallingEdgeInputCallback(timerCCHandlerRec_t *cbRec, captureCompare_t capture)
 {
     UNUSED(cbRec);
-    // Exit if we've already stored a "valid" telemetry edge time, if there's no valid PWM output, or if this edge is way too early to be real.
-    if (firstValidTelemetryTime || !ccrForLastPulse || capture < 1000) {
+    // Exit if we've already stored a "valid" telemetry edge time, if there's no valid PWM output, or if this edge is way too early to be telemetry data.
+    if (firstValidTelemetryTime || !ccrForLastPulse || capture < 1000 || capture < ccrForLastPulse+300) {
         return;
     }
     
@@ -361,6 +363,7 @@ static void castleFallingEdgeInputCallback(timerCCHandlerRec_t *cbRec, captureCo
     }
 }
 
+// Do some data processing at the beginning of each PWM pulse that we create
 static void castleUpdateCallback(timerOvrHandlerRec_t *cbRec, captureCompare_t capture)
 {
     UNUSED(cbRec);
@@ -406,7 +409,7 @@ static void castleUpdateCallback(timerOvrHandlerRec_t *cbRec, captureCompare_t c
     // Reset the firstValidTelemetry time after each read
     firstValidTelemetryTime = 0;
     
-    // Store the CCR value so we know the exact length of the next pulse even after the CCR preload is changed later on
+    // Store the initial CCR value so that the input callback knows the exact time of the PWM pulse end even if the CCR preload value is changed mid-pulse
     ccrForLastPulse = *motors[0].channel.ccr;
 }
 
