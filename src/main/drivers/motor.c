@@ -220,6 +220,9 @@ void motorDevInit(const motorDevConfig_t *motorConfig, uint16_t idlePulse, uint8
     case PWM_TYPE_BRUSHED:
         motorDevice = motorPwmDevInit(motorConfig, idlePulse, motorCount, useUnsyncedPwm);
         break;
+    case PWM_TYPE_CASTLELL:
+        motorDevice = motorPwmCastleLLDevInit(motorConfig, idlePulse, motorCount, useUnsyncedPwm);
+        break;
 
 #ifdef USE_DSHOT
     case PWM_TYPE_DSHOT150:

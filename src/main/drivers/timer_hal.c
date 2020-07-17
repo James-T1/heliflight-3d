@@ -521,6 +521,34 @@ void timerChConfigCallbacksDual(const timerHardware_t *timHw, timerCCHandlerRec_
     timerChConfig_UpdateOverflow(&timerConfig[timerIndex], timHw->tim);
 }
 
+// configure callbacks for PWM output update and adjacent channel falling edge input
+void castleTimerChConfigCallbacks(const timerHardware_t *timHw, timerCCHandlerRec_t *edgeCallback, timerOvrHandlerRec_t *overflowCallback)
+{
+    uint8_t timerIndex = lookupTimerIndex(timHw->tim);
+    if (timerIndex >= USED_TIMER_COUNT) {
+        return;
+    }
+    uint8_t channelIndex = lookupChannelIndex(timHw->channel);   // get index of PWM output channel
+    uint16_t chAdjacent = timHw->channel ^ TIM_CHANNEL_2;
+    uint8_t channelIndexAdjacent = lookupChannelIndex(chAdjacent);       // get index of indirect input capture channel
+
+    if (edgeCallback == NULL)   // disable irq before changing setting callback to NULL
+        __HAL_TIM_DISABLE_IT(&timerHandle[timerIndex].Handle, TIM_IT_CCx(chAdjacent));
+
+    // setup callback info
+    timerConfig[timerIndex].edgeCallback[channelIndexAdjacent] = edgeCallback;
+    timerConfig[timerIndex].overflowCallback[channelIndexAdjacent] = NULL;
+    timerConfig[timerIndex].overflowCallback[channelIndex] = overflowCallback;
+
+    // enable channel IRQs
+    if (edgeCallback) {
+        __HAL_TIM_CLEAR_FLAG(&timerHandle[timerIndex].Handle, TIM_IT_CCx(chAdjacent));
+        __HAL_TIM_ENABLE_IT(&timerHandle[timerIndex].Handle, TIM_IT_CCx(chAdjacent));
+    }
+    // enable update IRQ
+    timerChConfig_UpdateOverflow(&timerConfig[timerIndex], timHw->tim);
+}
+
 // enable/disable IRQ for low channel in dual configuration
 //void timerChITConfigDualLo(const timerHardware_t *timHw, FunctionalState newState) {
 //    TIM_ITConfig(timHw->tim, TIM_IT_CCx(timHw->channel&~TIM_Channel_2), newState);

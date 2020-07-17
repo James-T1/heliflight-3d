@@ -252,10 +252,11 @@ static const char * const lookupTableGyroHardwareLpf[] = {
 };
 
 static const char * const lookupTablePwmProtocol[] = {
-    "OFF", "ONESHOT125", "ONESHOT42", "MULTISHOT", "BRUSHED",
+    "STANDARD", "ONESHOT125", "ONESHOT42", "MULTISHOT", "BRUSHED",
 #ifdef USE_DSHOT
-    "DSHOT150", "DSHOT300", "DSHOT600", "PROSHOT1000"
+    "DSHOT150", "DSHOT300", "DSHOT600", "PROSHOT1000",
 #endif
+    "CASTLELL"
 };
 
 static const char * const lookupTableRcInterpolation[] = {

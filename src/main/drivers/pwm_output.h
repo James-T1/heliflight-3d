@@ -77,3 +77,6 @@ void pwmWriteServo(uint8_t index, float value);
 
 pwmOutputPort_t *pwmGetMotors(void);
 bool pwmIsSynced(void);
+
+motorDevice_t *motorPwmCastleLLDevInit(const struct motorDevConfig_s *motorDevConfig, uint16_t idlePulse, uint8_t motorCount, bool useUnsyncedPwm);
+extern volatile uint16_t ccTelemetryTimes[12];

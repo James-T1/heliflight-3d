@@ -332,4 +332,237 @@ void servoDevInit(const servoDevConfig_t *servoConfig)
     }
 }
 #endif // USE_SERVOS
+
+// Castle Link Live protocol
+timerCCHandlerRec_t edgeCb;
+timerOvrHandlerRec_t updateCb;
+
+// Note:  Since CCR is 16-bit, we're limited to 65535uS, or 16Hz as our minimum PWM frequency.
+static volatile uint16_t ccrForLastPulse = 0;               // Set this to the CCR used when a new PWM pulse is generated
+static volatile uint16_t firstValidTelemetryTime = 0;       // Reset this to zero each time a PWM pulse is generated
+static volatile bool ccDataValid = false;
+static volatile uint8_t ccTelemIndex = 0;
+static volatile uint16_t rawTelemetryTimes[11];             // Store the raw telemetry times (may include invalid data: check ccDataValid flag)
+const uint16_t ccMaxPulseLengths[11] = { 1000, 5500, 5500, 5500, 3000, 4500, 5500, 5500, 5500, 5500, 4500 };
+volatile uint16_t ccTelemetryTimes[12];              // Last array value is the validity field (0=invalid, 1=valid)
+
+static void castleFallingEdgeInputCallback(timerCCHandlerRec_t *cbRec, captureCompare_t capture)
+{
+    UNUSED(cbRec);
+    // Exit if we've already stored a "valid" telemetry edge time, if there's no valid PWM output, or if this edge is way too early to be real.
+    if (firstValidTelemetryTime || !ccrForLastPulse || capture < 1000) {
+        return;
+    }
+    
+    // Do a quick sanity check to ensure this edge is within window of 300uS to 5700uS of the end of our last PWM pulse before storing it
+    const uint16_t telemetryTime = lrintf((capture - ccrForLastPulse) / motors[0].pulseScale);
+    if (telemetryTime > 300 && telemetryTime < 5700) {
+        firstValidTelemetryTime = telemetryTime;
+    }
+}
+
+static void castleUpdateCallback(timerOvrHandlerRec_t *cbRec, captureCompare_t capture)
+{
+    UNUSED(cbRec);
+    // capture just stores the value of the ARR register
+    UNUSED(capture);
+    
+    // Check to see if we have a valid telemetry value
+    if (firstValidTelemetryTime) {
+        // Validate each telemetry pulse is within a window of +/- 200uS of the expected range, otherwise throw the data out.
+        // First pulse should be 1ms +/- the timing jitter
+        if (ccTelemIndex == 0 && firstValidTelemetryTime>800 && firstValidTelemetryTime<1200) {
+            rawTelemetryTimes[ccTelemIndex] = firstValidTelemetryTime;
+        // The other pulses should be 0.5ms minimum to their maximum pulse time per the Castle Link Live specification
+        } else if (ccTelemIndex>0 && ccTelemIndex<11 && firstValidTelemetryTime>300 && firstValidTelemetryTime<(ccMaxPulseLengths[ccTelemIndex]+200)) {
+            rawTelemetryTimes[ccTelemIndex] = firstValidTelemetryTime;
+        // If a non-zero pulse time does not meet the specification then ignore it and set our telemetry data as invalid.
+        } else {
+            ccDataValid = false;
+        }
+        
+        ccTelemIndex++;
+        
+    } else {
+        // No pulse was detected during the last PWM period.  Check if ccTelemIndex = 11 and the ccDataValid flag to see if we received a full set of valid telemetry data.
+        // If data is all valid, then set the "valid" flag in the ccTelemetryData array.  This flag allows for keeping state between this and the esc_sensor code.
+        //    Then when we read it from the esc_Sensor code we can just set the invalid flag once we're done with it...
+        //      ^^^ This!!  Then we'll read it once when it's valid, set the flag to invalid, and wait until we see a "valid" flag set again before we read the data.
+        //      And if we just see "invalid" over and over for too long (1 second or whatever), then we'll consider all of the data invalid.
+        if (ccTelemIndex == 11 && ccDataValid) {
+            // Copy raw telemetry times array to the castle ESC telemetry times array and set the validity flag to true.
+            for (int i=0; i<= 10; i++) {
+                ccTelemetryTimes[i] = rawTelemetryTimes[i];
+            }
+            // Set final value of array (validity flag) to true.
+            ccTelemetryTimes[11] = 1;
+        }
+        
+        // Reset our telemetry position index and data validity since no pulse was detected
+        ccTelemIndex = 0;
+        ccDataValid = true;
+    }
+
+    // Reset the firstValidTelemetry time after each read
+    firstValidTelemetryTime = 0;
+    
+    // Store the CCR value so we know the exact length of the next pulse even after the CCR preload is changed later on
+    ccrForLastPulse = *motors[0].channel.ccr;
+}
+
+motorDevice_t *motorPwmCastleLLDevInit(const motorDevConfig_t *motorConfig, uint16_t idlePulse, uint8_t motorCount, bool useUnsyncedPwm)
+{
+    motorPwmDevice.vTable = motorPwmVTable;
+
+    //Castle is standard PWM and only case PWM_TYPE_STANDARD:
+    float sMin = 1e-3f;
+    float sLen = 1e-3f;
+    useUnsyncedPwm = true;
+    idlePulse = 0;
+
+    motorPwmDevice.vTable.write = pwmWriteStandard;
+    motorPwmDevice.vTable.updateStart = motorUpdateStartNull;
+    motorPwmDevice.vTable.updateComplete = useUnsyncedPwm ? motorUpdateCompleteNull : pwmCompleteOneshotMotorUpdate;
+
+    // Configure only Motor 1 for Castle Link Live Telemetry
+    if (0 < motorCount) {
+        int motorIndex = 0;
+        const ioTag_t tag = motorConfig->ioTags[motorIndex];
+        const timerHardware_t *timerHardware = timerAllocate(tag, OWNER_MOTOR, RESOURCE_INDEX(motorIndex));
+
+        if (timerHardware == NULL) {
+            /* not enough motors initialised for the mixer or a break in the motors */
+            motorPwmDevice.vTable.write = &pwmWriteUnused;
+            motorPwmDevice.vTable.updateComplete = motorUpdateCompleteNull;
+            /* TODO: block arming and add reason system cannot arm */
+            return NULL;
+        }
+
+        motors[motorIndex].io = IOGetByTag(tag);
+        IOInit(motors[motorIndex].io, OWNER_MOTOR, RESOURCE_INDEX(motorIndex));
+
+#if defined(STM32F1)
+        IOConfigGPIO(motors[motorIndex].io, IOCFG_AF_OD);
+#else
+        IOConfigGPIOAF(motors[motorIndex].io, IOCFG_AF_OD, timerHardware->alternateFunction);
+#endif
+
+        /* standard PWM output */
+        const unsigned pwmRateHz = motorConfig->motorPwmRate;
+
+        const uint32_t clock = timerClock(timerHardware->tim);
+        /* used to find the desired timer frequency for max resolution */
+        const unsigned prescaler = ((clock / pwmRateHz) + 0xffff) / 0x10000; /* rounding up */
+        const uint32_t hz = clock / prescaler;
+        const unsigned period = hz / pwmRateHz;
+
+        motors[motorIndex].pulseScale = (sLen * hz) / 1000.0f;
+        motors[motorIndex].pulseOffset = (sMin * hz) - (motors[motorIndex].pulseScale * 1000);
+        
+        // Castle ESC in LinkLive mode requires inverted PWM (low = active part of PWM pulse)
+        pwmOutConfig(&motors[motorIndex].channel, timerHardware, hz, period, idlePulse, true);
+
+        bool timerAlreadyUsed = false;
+        for (int i = 0; i < motorIndex; i++) {
+            if (motors[i].channel.tim == motors[motorIndex].channel.tim) {
+                timerAlreadyUsed = true;
+                break;
+            }
+        }
+        motors[motorIndex].forceOverflow = !timerAlreadyUsed;
+        motors[motorIndex].enabled = true;
+        
+        // Setup the callbacks and enable IRQs for PWM generator and input capture on indirect channel
+        // Use the timerHardware->channel value to get the paired adjacent channel (channels 1/2 and 3/4).
+        //   0x00 is channel 1, 0x10 is channel 3
+        //   0x01 is channel 2, 0x11 is channel 4
+        //   So the "adjacent channel" is always timerHardware->channel XOR 0x01  (channel 2)
+        timerNVICConfigure(timerInputIrq(timerHardware->tim));
+        timerChCCHandlerInit(&edgeCb, castleFallingEdgeInputCallback);
+        timerChOvrHandlerInit(&updateCb, castleUpdateCallback);
+        castleTimerChConfigCallbacks(timerHardware, &edgeCb, &updateCb);
+
+        // Initialize the indirect input capture on the adjacent timer channel
+#if defined(USE_HAL_DRIVER)
+        TIM_HandleTypeDef* Handle = timerFindTimerHandle(timerHardware->tim);
+        if (Handle == NULL) return NULL;
+
+        TIM_IC_InitTypeDef TIM_ICInitStructure;
+        memset(&TIM_ICInitStructure, 0, sizeof(TIM_ICInitStructure));
+        TIM_ICInitStructure.ICPolarity = TIM_ICPOLARITY_FALLING;
+        TIM_ICInitStructure.ICSelection = TIM_ICSELECTION_INDIRECTTI;
+        TIM_ICInitStructure.ICPrescaler = TIM_ICPSC_DIV1;
+        TIM_ICInitStructure.ICFilter = 0;
+        HAL_TIM_IC_ConfigChannel(Handle, &TIM_ICInitStructure, timerHardware->channel ^ TIM_CHANNEL_2);
+        HAL_TIM_IC_Start_IT(Handle, timerHardware->channel);
+#else
+        TIM_ICInitTypeDef TIM_ICInitStructure;
+        TIM_ICStructInit(&TIM_ICInitStructure);
+        TIM_ICInitStructure.TIM_Channel = timerHardware->channel ^ TIM_Channel_2;   // get opposite channel no
+        TIM_ICInitStructure.TIM_ICPolarity = TIM_ICPolarity_Falling;
+        TIM_ICInitStructure.TIM_ICSelection = TIM_ICSelection_IndirectTI;
+        TIM_ICInitStructure.TIM_ICPrescaler = TIM_ICPSC_DIV1;
+        TIM_ICInitStructure.TIM_ICFilter = 0;
+        TIM_ICInit(timerHardware->tim, &TIM_ICInitStructure);
+#endif
+
+    }
+    
+    // Initialize the rest of the motors as they would be in pwm_output.c (normal polarity and push/pull configuration with no Castle telemetry)
+    for (int motorIndex = 1; motorIndex < MAX_SUPPORTED_MOTORS && motorIndex < motorCount; motorIndex++) {
+        const ioTag_t tag = motorConfig->ioTags[motorIndex];
+        const timerHardware_t *timerHardware = timerAllocate(tag, OWNER_MOTOR, RESOURCE_INDEX(motorIndex));
+
+        if (timerHardware == NULL) {
+            /* not enough motors initialised for the mixer or a break in the motors */
+            motorPwmDevice.vTable.write = &pwmWriteUnused;
+            motorPwmDevice.vTable.updateComplete = motorUpdateCompleteNull;
+            /* TODO: block arming and add reason system cannot arm */
+            return NULL;
+        }
+
+        motors[motorIndex].io = IOGetByTag(tag);
+        IOInit(motors[motorIndex].io, OWNER_MOTOR, RESOURCE_INDEX(motorIndex));
+
+#if defined(STM32F1)
+        IOConfigGPIO(motors[motorIndex].io, IOCFG_AF_PP);
+#else
+        IOConfigGPIOAF(motors[motorIndex].io, IOCFG_AF_PP, timerHardware->alternateFunction);
+#endif
+
+        /* standard PWM outputs */
+        // margin of safety is 4 periods when unsynced
+        const unsigned pwmRateHz = useUnsyncedPwm ? motorConfig->motorPwmRate : ceilf(1 / ((sMin + sLen) * 4));
+
+        const uint32_t clock = timerClock(timerHardware->tim);
+        /* used to find the desired timer frequency for max resolution */
+        const unsigned prescaler = ((clock / pwmRateHz) + 0xffff) / 0x10000; /* rounding up */
+        const uint32_t hz = clock / prescaler;
+        const unsigned period = useUnsyncedPwm ? hz / pwmRateHz : 0xffff;
+
+        /*
+            if brushed then it is the entire length of the period.
+            TODO: this can be moved back to periodMin and periodLen
+            once mixer outputs a 0..1 float value.
+        */
+        motors[motorIndex].pulseScale = ((motorConfig->motorPwmProtocol == PWM_TYPE_BRUSHED) ? period : (sLen * hz)) / 1000.0f;
+        motors[motorIndex].pulseOffset = (sMin * hz) - (motors[motorIndex].pulseScale * 1000);
+
+        pwmOutConfig(&motors[motorIndex].channel, timerHardware, hz, period, idlePulse, motorConfig->motorPwmInversion);
+
+        bool timerAlreadyUsed = false;
+        for (int i = 0; i < motorIndex; i++) {
+            if (motors[i].channel.tim == motors[motorIndex].channel.tim) {
+                timerAlreadyUsed = true;
+                break;
+            }
+        }
+        motors[motorIndex].forceOverflow = !timerAlreadyUsed;
+        motors[motorIndex].enabled = true;
+    }
+
+    return &motorPwmDevice;
+}
+
+
 #endif // USE_PWM_OUTPUT

@@ -265,7 +265,7 @@ static void validateAndFixConfig(void)
         }
     }
 
-    if ((motorConfig()->dev.motorPwmProtocol == PWM_TYPE_STANDARD) && (motorConfig()->dev.motorPwmRate > BRUSHLESS_MOTORS_PWM_RATE)) {
+    if (((motorConfig()->dev.motorPwmProtocol == PWM_TYPE_STANDARD)||(motorConfig()->dev.motorPwmProtocol == PWM_TYPE_CASTLELL)) && (motorConfig()->dev.motorPwmRate > BRUSHLESS_MOTORS_PWM_RATE)) {
         motorConfigMutable()->dev.motorPwmRate = BRUSHLESS_MOTORS_PWM_RATE;
     }
 
@@ -618,6 +618,7 @@ void validateAndFixGyroConfig(void)
     // check for looptime restrictions based on motor protocol. Motor times have safety margin
     float motorUpdateRestriction;
     switch (motorConfig()->dev.motorPwmProtocol) {
+    case PWM_TYPE_CASTLELL:
     case PWM_TYPE_STANDARD:
             motorUpdateRestriction = 1.0f / BRUSHLESS_MOTORS_PWM_RATE;
             break;
